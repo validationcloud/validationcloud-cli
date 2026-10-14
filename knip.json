@@ -1,0 +1,8 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/cli.ts", "types/ts-reset.d.ts"],
+  "project": ["src/**/*.ts", "test/**/*.ts", "types/**/*.d.ts"],
+  "github-actions": {
+    "config": [".github/workflows/*.{yml,yaml}"]
+  }
+}

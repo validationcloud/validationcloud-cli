@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Native Git hook - enable with: git config core.hooksPath .githooks
+set -euo pipefail
+
+ignored_staged_paths=(
+  ":(exclude).agents/**"
+  ":(exclude).claude/**"
+  ":(exclude).clawpatch/**"
+  ":(exclude).codex/**"
+)
+
+git diff --cached --check -- . "${ignored_staged_paths[@]}"
+
+has_staged_changes() {
+  if [[ "$#" -eq 0 ]]; then
+    git diff --cached --quiet -- . "${ignored_staged_paths[@]}" || return 0
+    return 1
+  fi
+
+  git diff --cached --quiet -- "$@" || return 0
+  return 1
+}
+
+if [[ ! -f package.json ]]; then
+  exit 0
+fi
+
+if ! has_staged_changes; then
+  exit 0
+fi
+
+# `npm pkg fix` normalizes package.json (e.g., sorts keys, trims invalid
+# fields). Only run it when package.json is already staged, so the hook never
+# pulls unrelated working-tree edits into a commit.
+if has_staged_changes package.json && command -v npm >/dev/null 2>&1; then
+  npm pkg fix || true
+  git add package.json 2>/dev/null || true
+fi
+
+run_package_script() {
+  local script_name="$1"
+  # --if-present runs the script when package.json defines it and exits 0 when it
+  # doesn't, so the hook can list a superset of scripts no repo fully implements.
+  if command -v pnpm >/dev/null 2>&1; then
+    pnpm run --if-present "$script_name"
+  elif command -v npm >/dev/null 2>&1; then
+    npm run --if-present "$script_name"
+  else
+    # return, not exit: callers redirect this function's output into a log
+    # they only dump on failure — exit here would abort before the dump,
+    # leaving the commit to die with no visible error.
+    echo "No package manager available to run script: $script_name" >&2
+    return 127
+  fi
+}
+
+script_log=$(mktemp)
+trap 'rm -f "$script_log"' EXIT
+
+# Logs a "==> <name>" header, then runs the script with output captured and shown only on failure before exiting non-zero.
+run_script() {
+  local script_name="$1"
+  echo "==> $script_name" >&2
+  if run_package_script "$script_name" > "$script_log" 2>&1; then
+    return 0
+  fi
+  cat "$script_log" >&2
+  exit 1
+}
+
+if [[ -f pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
+  if has_staged_changes package.json pnpm-lock.yaml pnpm-workspace.yaml; then
+    # Materialize first: dedupe --check can purge a topology-mismatched node_modules before its check-only phase.
+    pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false --config.optimistic-repeat-install=false
+    pnpm dedupe --check --config.confirm-modules-purge=false
+  fi
+fi
+
+run_script "format:check"
+run_script "knip"
+run_script "typecheck"
+run_script "lint"
+run_script "fta"
+# Scrub git's hook env vars so a test that shells out to git hits a scratch repo, not this repo's real gitdir.
+run_test_script() {
+  local script_name="$1"
+  echo "==> $script_name" >&2
+  if (
+    unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR GIT_PREFIX GIT_OBJECT_DIRECTORY
+    run_package_script "$script_name"
+  ) > "$script_log" 2>&1; then
+    return 0
+  fi
+  cat "$script_log" >&2
+  exit 1
+}
+
+run_test_script "test"

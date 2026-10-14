@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+*.tsbuildinfo
+*.tgz
+*.log
+.env
+.env.*
+.eslintcache
+.claude/worktrees/

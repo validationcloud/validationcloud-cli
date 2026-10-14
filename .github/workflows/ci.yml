@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  push:
+    branches: [main]
+
+# No token by default; the job grants only what it needs.
+permissions: {}
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Strip untrusted project install config
+        # pull_request checks out attacker-controlled code: a committed .npmrc can redirect installs or leak registry credentials, and pnpm runs .pnpmfile.cjs/.pnpmfile.mjs hooks even under --ignore-scripts.
+        run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
+
+      - name: Set up the toolchain
+        uses: ./.github/actions/install-workspace
+
+      # --ignore-scripts keeps dependency lifecycle scripts, and our own `prepare` hook installer, from running in CI.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Knip
+        run: pnpm run knip
+
+      - name: Check formatting
+        run: pnpm run format:check
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Check complexity (FTA)
+        run: pnpm run fta
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Test
+        run: pnpm run test

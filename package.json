@@ -1,0 +1,79 @@
+{
+  "name": "@validationcloud/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Command-line client for Validation Cloud's MCP server: every MCP tool becomes a subcommand.",
+  "license": "UNLICENSED",
+  "author": "Validation Cloud",
+  "bin": {
+    "vcloud": "bin/vcloud"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "!dist/*.tsbuildinfo"
+  ],
+  "type": "module",
+  "imports": {
+    "#auth/*": {
+      "vc-source": "./src/auth/*.ts",
+      "default": "./dist/auth/*.js"
+    },
+    "#cli/*": {
+      "vc-source": "./src/cli/*.ts",
+      "default": "./dist/cli/*.js"
+    },
+    "#core/*": {
+      "vc-source": "./src/core/*.ts",
+      "default": "./dist/core/*.js"
+    },
+    "#mcp/*": {
+      "vc-source": "./src/mcp/*.ts",
+      "default": "./dist/mcp/*.js"
+    },
+    "#shared/*": {
+      "vc-source": "./src/shared/*.ts",
+      "default": "./dist/shared/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.app.json",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "format": "oxfmt --config .oxfmtrc.json .",
+    "format:check": "oxfmt --check --config .oxfmtrc.json .",
+    "fta": "fta-check",
+    "knip": "knip",
+    "lint": "oxlint --deny-warnings --report-unused-disable-directives .",
+    "prepack": "pnpm run rebuild",
+    "prepare": "if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then git config core.hooksPath .githooks; fi",
+    "rebuild": "pnpm run clean && pnpm run build",
+    "test": "vitest run",
+    "typecheck": "tsc -b --noEmit",
+    "vcloud": "pnpm -s run rebuild && node bin/vcloud"
+  },
+  "dependencies": {
+    "@commander-js/extra-typings": "^15.0.0",
+    "@modelcontextprotocol/client": "^2.3.1",
+    "commander": "^15.0.0",
+    "env-paths": "^4.0.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
+    "@total-typescript/ts-reset": "^0.6.1",
+    "@types/node": "^26.6.5",
+    "@vitest/coverage-v8": "^5.0.3",
+    "fta-check": "^1.5.8",
+    "fta-cli": "^3.1.0",
+    "knip": "^6.41.0",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0",
+    "oxlint-tsgolint": "^7.0.2004",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "packageManager": "pnpm@11.22.0"
+}
