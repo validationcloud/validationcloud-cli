@@ -1,16 +1,30 @@
 {
   "name": "@validationcloud/cli",
   "version": "0.1.0",
-  "private": true,
   "description": "Command-line client for Validation Cloud's MCP server: every MCP tool becomes a subcommand.",
-  "license": "UNLICENSED",
+  "keywords": [
+    "cli",
+    "mcp",
+    "validationcloud"
+  ],
+  "homepage": "https://github.com/validationcloud/validationcloud-cli#readme",
+  "bugs": {
+    "url": "https://github.com/validationcloud/validationcloud-cli/issues"
+  },
+  "license": "MIT",
   "author": "Validation Cloud",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/validationcloud/validationcloud-cli.git"
+  },
   "bin": {
     "vcloud": "bin/vcloud"
   },
   "files": [
     "bin/",
     "dist/",
+    "!dist/**/*.d.ts",
+    "!dist/**/*.map",
     "!dist/*.tsbuildinfo"
   ],
   "type": "module",
@@ -35,6 +49,9 @@
       "vc-source": "./src/shared/*.ts",
       "default": "./dist/shared/*.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.app.json",
@@ -69,11 +86,12 @@
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
     "oxlint-tsgolint": "^7.0.2004",
+    "semantic-release": "^25.0.9",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
   },
   "engines": {
-    "node": ">=24.15.0"
+    "node": ">=22.12.0"
   },
   "packageManager": "pnpm@11.22.0"
 }

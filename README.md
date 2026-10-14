@@ -4,18 +4,20 @@
 
 ```console
 $ vcloud nodeapi list-chains
-$ vcloud nodeapi get-endpoint 3f2c0c9e-0000-0000-0000-000000000000 --json
+$ vcloud nodeapi get-endpoint 00000000-0000-0000-0000-000000000000 --json
 $ vcloud tools
 ```
 
 ## Install
 
-This package is private and is installed from a checkout. Node.js 24.15 or newer and pnpm are required.
+Requires Node.js 22.12 or newer. The package installs one command, `vcloud`.
 
 ```bash
-pnpm install && pnpm build && pnpm link --global   # then run: vcloud --help
-node bin/vcloud --help                                   # or run it straight from the checkout
+npm install -g @validationcloud/cli
+vcloud --help
 ```
+
+To run it without installing, use `npx @validationcloud/cli --help`.
 
 ## Log in
 
@@ -101,6 +103,8 @@ Paths come from [`env-paths`](https://github.com/sindresorhus/env-paths) without
 
 ## Development
 
+Development needs the Node.js version in `.node-version`; the complexity check (`fta`) needs Node 24.15 or newer.
+
 ```bash
 pnpm install
 pnpm run knip && pnpm run format:check && pnpm run typecheck && pnpm run lint && pnpm run fta && pnpm run build && pnpm test
@@ -108,3 +112,22 @@ pnpm vcloud nodeapi --help    # rebuild, then run from source
 ```
 
 `pnpm test` includes an integration test that builds the CLI and runs it as a child process against a local stateless MCP server (`test/stub-mcp-server.ts`, built on `@modelcontextprotocol/server`).
+
+## Releasing
+
+Merging into `main` publishes to npm through the `Release` workflow after CI passes. semantic-release picks the version from the squash commit, whose title and body are the pull request's:
+
+| Commit                                                         | Release |
+| -------------------------------------------------------------- | ------- |
+| `fix:` or `perf:`                                              | patch   |
+| `feat:`                                                        | minor   |
+| a `BREAKING CHANGE:` line in the body                          | major   |
+| anything else (`chore:`, `docs:`, `test:`, `refactor:`, `ci:`) | none    |
+
+semantic-release's default preset does not recognize the `!` shorthand (`feat!:`): such a title releases nothing.
+
+The workflow tags the commit before it publishes, so if `npm publish` fails, delete the new tag and its GitHub release before re-running it.
+
+## License
+
+The code is released under the [MIT License](LICENSE). The Validation Cloud name and logo are trademarks of Validation Cloud and are not covered by that license.

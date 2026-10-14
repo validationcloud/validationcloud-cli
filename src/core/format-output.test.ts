@@ -123,16 +123,16 @@ describe("formatText", () => {
 });
 
 describe("formatHuman for a record with a record array and scalars", () => {
-  it("prints the team usage shape as key/value lines with the series as one JSON cell", () => {
+  it("prints scalars as key/value lines with the record array as one JSON cell", () => {
     expect(
       formatHuman({
-        compute_units: 11_004_560,
+        compute_units: 1000,
         from: "2026-10-01T00:00:00Z",
         series: [{ time: "2026-10-01T00:00:00Z", compute_units: 1 }],
         to: "2026-11-01T00:00:00Z",
       }),
     ).toBe(
-      'compute_units\t11004560\nfrom\t2026-10-01T00:00:00Z\nseries\t[{"time":"2026-10-01T00:00:00Z","compute_units":1}]\nto\t2026-11-01T00:00:00Z\n',
+      'compute_units\t1000\nfrom\t2026-10-01T00:00:00Z\nseries\t[{"time":"2026-10-01T00:00:00Z","compute_units":1}]\nto\t2026-11-01T00:00:00Z\n',
     );
   });
 });

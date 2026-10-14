@@ -1,0 +1,63 @@
+name: Release
+
+# Every push to main runs CI and releases only if it passes. CI is called as a reusable workflow, not triggered through workflow_run, so the release job runs in a plain push event.
+on:
+  push:
+    branches: [main]
+
+# No token by default; each job grants only what it needs.
+permissions: {}
+
+# Releases run one at a time and are never cancelled midway: a half-finished release leaves a tag without a publish.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    # A reusable workflow gets at most the caller job's permissions, so the call grants the read access its jobs declare.
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Release
+    needs: [ci]
+    # semantic-release verifies npm auth on every run, even with nothing to release, so the job waits until the npm trusted publisher is linked.
+    if: vars.NPM_TRUSTED_PUBLISHING == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the tag and the GitHub Release
+      issues: write # comment on released issues
+      pull-requests: write # comment on released pull requests
+      id-token: write # npm trusted publishing (OIDC) and provenance
+    steps:
+      - name: Check out the pushed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # semantic-release reads the tag history, so it needs every commit and tag.
+          fetch-depth: 0
+          # semantic-release pushes the tag to a URL built from GITHUB_TOKEN, so no credentials stay in .git/config.
+          persist-credentials: false
+
+      # npm attaches provenance only for public repositories and otherwise publishes without it, silently.
+      - name: Require a public repository
+        if: github.event.repository.private
+        run: |
+          echo "::error::The repository is private, so npm would publish without provenance."
+          exit 1
+
+      - name: Set up the toolchain
+        uses: ./.github/actions/install-workspace
+
+      # --ignore-scripts keeps dependency lifecycle scripts, and our own `prepare` hook installer, from running here.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # The npm publish step runs the `prepack` script, which rebuilds dist from this checkout.
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec semantic-release

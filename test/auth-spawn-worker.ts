@@ -12,7 +12,16 @@ export function spawnWorker(
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      ["--conditions=vc-source", refreshWorkerPath, mode, credentialsPath, argument],
+      [
+        // Node before 22.18 needs the flag to run .ts files, and prints a warning on stderr that the tests compare with "".
+        "--experimental-strip-types",
+        "--disable-warning=ExperimentalWarning",
+        "--conditions=vc-source",
+        refreshWorkerPath,
+        mode,
+        credentialsPath,
+        argument,
+      ],
       {
         stdio: ["ignore", "ignore", "pipe"],
       },

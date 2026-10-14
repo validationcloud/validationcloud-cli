@@ -3,8 +3,8 @@ name: CI
 on:
   pull_request:
     types: [opened, reopened, synchronize]
-  push:
-    branches: [main]
+  # release.yml calls this workflow on every push to main, so main is checked there and not by a trigger of its own.
+  workflow_call:
 
 # No token by default; the job grants only what it needs.
 permissions: {}
@@ -47,6 +47,37 @@ jobs:
 
       - name: Check complexity (FTA)
         run: pnpm run fta
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Test
+        run: pnpm run test
+
+  # engines.node starts at 22.12.0; this job keeps that claim true. The other gates run once, on the default version (fta-check itself needs Node 24.15 or newer).
+  node-minimum:
+    name: Node 22.12.0 build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Strip untrusted project install config
+        # Same as in the checks job: pull_request checks out attacker-controlled code.
+        run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
+
+      - name: Set up the toolchain
+        uses: ./.github/actions/install-workspace
+        with:
+          node-version: 22.12.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build
         run: pnpm run build

@@ -48,7 +48,8 @@ async function run(mode: string, credentialsPath: string, argument: string): Pro
   await auth(provider, { serverUrl: new URL(argument) });
 }
 
-if (import.meta.main) {
+// import.meta.main exists only from Node 24.2, so compare the entry path instead.
+if (process.argv[1] === refreshWorkerPath) {
   const [mode = "", credentialsPath = "", argument = ""] = process.argv.slice(2);
   const outcome = await withSdkConsoleCaptured(() => run(mode, credentialsPath, argument));
   if (outcome.status === "rejected") {
