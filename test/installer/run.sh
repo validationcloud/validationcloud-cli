@@ -56,6 +56,7 @@ run_installer "$INSTALL_1" ZDOTDIR="$H/zdot"
 expect_equals "fresh install exits 0" "$RC" 0
 expect_contains "fresh install says what it installed" "$OUT" "Installed valcloud 0.1.0 at $H/.local/bin/valcloud"
 expect_contains "fresh install points at auth login" "$OUT" "Next: valcloud auth login"
+expect_equals "the runtime installed is $PLATFORM" "$(ls "$H/.valcloud/runtime")" "node-v$(runtime_field 'runtime.version')-$PLATFORM"
 expect_equals "launcher runs without Node.js on PATH" "$(launcher_version "$H/.local/bin/valcloud")" 0.1.0
 check "launcher carries the ownership marker" grep -qF '# managed by the valcloud installer' "$H/.local/bin/valcloud"
 check "install dir carries the installer marker" test -f "$H/.valcloud/.valcloud-installer"
@@ -437,6 +438,23 @@ else
 fi
 kill "$PROXY_PID" 2>/dev/null
 wait "$PROXY_PID" 2>/dev/null
+
+echo "# Rosetta"
+if [ "$PLATFORM" != darwin-arm64 ]; then
+  skip "Rosetta: the host is not Apple silicon ($PLATFORM)"
+elif ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+  skip "Rosetta: not installed on this Mac (arch -x86_64 /usr/bin/true fails)"
+else
+  # shellcheck disable=SC2016 # the inner shell expands these
+  expect_equals "the x86_64 shell is translated" "$(env -i PATH="$BASE_PATH" arch -x86_64 /bin/bash -c 'printf "%s %s" "$(uname -m)" "$(sysctl -in sysctl.proc_translated)"')" "x86_64 1"
+  new_home
+  # shellcheck disable=SC2002 # a pipe, as in curl | bash
+  OUT=$(cat "$INSTALL_1" | env -i HOME="$H" PATH="$BASE_PATH" SHELL=/bin/zsh arch -x86_64 /bin/bash 2>&1)
+  RC=$?
+  expect_equals "an install from an x86_64 shell exits 0" "$RC" 0
+  expect_equals "an x86_64 shell on Apple silicon gets the darwin-arm64 runtime" "$(ls "$H/.valcloud/runtime")" "node-v$(runtime_field 'runtime.version')-darwin-arm64"
+  expect_equals "the launcher runs" "$(launcher_version "$H/.local/bin/valcloud")" 0.1.0
+fi
 
 echo "# macOS floor"
 if [ "$(id -u)" = 0 ]; then

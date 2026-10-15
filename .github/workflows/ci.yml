@@ -117,7 +117,7 @@ jobs:
       - name: Test the bundle
         run: pnpm run test:bundle
 
-  # Installs with the rendered install.sh from local files, with no Node.js on PATH, on each platform family: Linux x64 and arm64, and macOS.
+  # Installs with the rendered install.sh from local files, with no Node.js on PATH, on Linux x64 and arm64, macOS on Apple silicon (also from an x86_64 shell under Rosetta when the runner has it) and macOS on Intel.
   installer:
     name: Installer on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -125,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel]
     permissions:
       contents: read
     steps:
