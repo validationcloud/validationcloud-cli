@@ -3,7 +3,7 @@ export class CredentialsFileError extends Error {
 
   constructor(filePath: string) {
     super(
-      `credentials file ${filePath} is unreadable or corrupt; run 'vcloud auth logout' or delete the file, then log in again`,
+      `credentials file ${filePath} is unreadable or corrupt; run 'valcloud auth logout' or delete the file, then log in again`,
     );
     this.name = "CredentialsFileError";
     this.filePath = filePath;

@@ -52,7 +52,7 @@ export function formatFailure(failure: CliFailure, json: boolean): string {
   const retry =
     failure.retryAfterSeconds === undefined ? "" : ` (retry after ${failure.retryAfterSeconds}s)`;
   const hint = failure.hint === undefined ? "" : `\nhint: ${failure.hint}`;
-  return `vcloud: ${prefix}${failure.message}${retry}${hint}\n`;
+  return `valcloud: ${prefix}${failure.message}${retry}${hint}\n`;
 }
 
 export class CliFailureError extends Error {

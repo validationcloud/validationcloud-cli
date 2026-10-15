@@ -3,6 +3,6 @@
 try {
   await import("../dist/cli.js");
 } catch (error) {
-  console.error("Failed to start vcloud:", error instanceof Error ? error.message : error);
+  console.error("Failed to start valcloud:", error instanceof Error ? error.message : error);
   process.exitCode = 1;
 }

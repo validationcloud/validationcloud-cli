@@ -7,12 +7,12 @@ Development needs the Node.js version in `.node-version`; the complexity check (
 ```bash
 pnpm install
 pnpm run knip && pnpm run format:check && pnpm run typecheck && pnpm run lint && pnpm run fta && pnpm run build && pnpm test
-pnpm vcloud nodeapi --help    # rebuild, then run from source
+pnpm valcloud nodeapi --help    # rebuild, then run from source
 ```
 
 `pnpm test` includes an integration test that builds the CLI and runs it as a child process against a local stateless MCP server (`test/stub-mcp-server.ts`, built on `@modelcontextprotocol/server`).
 
-`VC_MCP_URL` points `vcloud` at a different MCP gateway for one run. It must be https, or http on localhost.
+`VC_MCP_URL` points `valcloud` at a different MCP gateway for one run. It must be https, or http on localhost.
 
 ## Releasing
 

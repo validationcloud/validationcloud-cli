@@ -25,7 +25,7 @@ export function buildToolSpecs(
     if (reservedNamespaces.has(spec.namespace)) {
       unmapped.push({
         toolName: tool.name,
-        reason: `the namespace '${spec.namespace}' is a built-in vcloud command`,
+        reason: `the namespace '${spec.namespace}' is a built-in valcloud command`,
       });
       continue;
     }
@@ -34,7 +34,7 @@ export function buildToolSpecs(
     if (owner !== undefined) {
       unmapped.push({
         toolName: tool.name,
-        reason: `the command 'vcloud ${identity}' is already taken by ${owner}`,
+        reason: `the command 'valcloud ${identity}' is already taken by ${owner}`,
       });
       continue;
     }

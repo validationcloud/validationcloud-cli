@@ -55,7 +55,7 @@ function listenOn(server: Server, host: string, port: number): Promise<"listenin
       reject(
         error.code === "EADDRINUSE"
           ? new Error(
-              `${address} is already in use; vcloud needs port ${port} free on 127.0.0.1 and ::1 for the login callback. Stop whatever is listening on ${address} and retry`,
+              `${address} is already in use; valcloud needs port ${port} free on 127.0.0.1 and ::1 for the login callback. Stop whatever is listening on ${address} and retry`,
             )
           : new Error(
               `cannot listen on ${address} for the login callback (${error.code ?? error.message})`,
@@ -92,7 +92,7 @@ export async function startLoopbackListener(
     if (!matchesState(url.searchParams.get("state"), expectedState)) {
       response
         .writeHead(400, { "content-type": "text/plain; charset=utf-8", connection: "close" })
-        .end("This callback does not belong to the pending vcloud login.\n");
+        .end("This callback does not belong to the pending valcloud login.\n");
       return;
     }
     response

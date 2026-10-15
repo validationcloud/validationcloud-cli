@@ -121,7 +121,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   });
   if (captured.suppressedCount > 0 && !scan.wantsJson) {
     io.stderr(
-      `vcloud: note: the MCP SDK printed ${captured.suppressedCount} message(s) that were hidden because they can quote server responses\n`,
+      `valcloud: note: the MCP SDK printed ${captured.suppressedCount} message(s) that were hidden because they can quote server responses\n`,
     );
   }
   if (captured.status === "fulfilled") return 0;

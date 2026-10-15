@@ -29,12 +29,12 @@ describe("buildToolSpecs", () => {
     );
     expect(unmapped).toStrictEqual([
       { toolName: "ping", reason: "the tool name is not of the form <namespace>.<command>" },
-      { toolName: "auth.login", reason: "the namespace 'auth' is a built-in vcloud command" },
-      { toolName: "tools.list", reason: "the namespace 'tools' is a built-in vcloud command" },
+      { toolName: "auth.login", reason: "the namespace 'auth' is a built-in valcloud command" },
+      { toolName: "tools.list", reason: "the namespace 'tools' is a built-in valcloud command" },
       {
         toolName: "nodeapi.getEndpoint",
         reason:
-          "the command 'vcloud nodeapi get-endpoint' is already taken by nodeapi.get_endpoint",
+          "the command 'valcloud nodeapi get-endpoint' is already taken by nodeapi.get_endpoint",
       },
     ]);
   });

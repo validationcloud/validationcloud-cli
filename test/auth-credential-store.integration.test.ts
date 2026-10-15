@@ -49,7 +49,7 @@ describe("credential store on disk", () => {
 
     expect(error).toBeInstanceOf(CredentialsFileError);
     expect((error as Error).message).toBe(
-      `credentials file ${directory}/credentials.json is unreadable or corrupt; run 'vcloud auth logout' or delete the file, then log in again`,
+      `credentials file ${directory}/credentials.json is unreadable or corrupt; run 'valcloud auth logout' or delete the file, then log in again`,
     );
     expect((error as Error).message).not.toContain("secret-fragment");
     expect((error as Error).cause).toBeUndefined();
