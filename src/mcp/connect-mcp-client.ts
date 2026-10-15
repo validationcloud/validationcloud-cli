@@ -22,7 +22,7 @@ export function createMcpConnection(url: string, auth: McpAuth): McpConnection {
   const authProvider =
     auth.kind === "static" ? { token: () => Promise.resolve(auth.token) } : auth.provider;
   const client = new Client(
-    { name: "vcloud", version: packageInfo.version },
+    { name: "valcloud", version: packageInfo.version },
     { versionNegotiation: { mode: { pin: PINNED_PROTOCOL_VERSION } } },
   );
   const transport = new StreamableHTTPClientTransport(new URL(url), { authProvider });

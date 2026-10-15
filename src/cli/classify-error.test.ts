@@ -36,7 +36,7 @@ describe("classifyError", () => {
     expect(classifyError(new CredentialsFileError("/tmp/credentials.json"))).toStrictEqual({
       kind: "other",
       message:
-        "credentials file /tmp/credentials.json is unreadable or corrupt; run 'vcloud auth logout' or delete the file, then log in again",
+        "credentials file /tmp/credentials.json is unreadable or corrupt; run 'valcloud auth logout' or delete the file, then log in again",
     });
   });
 

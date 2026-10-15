@@ -14,18 +14,18 @@ const base: CliFailure = {
 describe("formatFailure", () => {
   describe("human output", () => {
     it.each([
-      ["message only", {}, "vcloud: Boom\n"],
-      ["code prefix", { code: "rate_limited" }, "vcloud: rate_limited: Boom\n"],
-      ["retry hint", { retryAfterSeconds: 30 }, "vcloud: Boom (retry after 30s)\n"],
+      ["message only", {}, "valcloud: Boom\n"],
+      ["code prefix", { code: "rate_limited" }, "valcloud: rate_limited: Boom\n"],
+      ["retry hint", { retryAfterSeconds: 30 }, "valcloud: Boom (retry after 30s)\n"],
       [
         "hint line",
-        { hint: "run vcloud auth login" },
-        "vcloud: Boom\nhint: run vcloud auth login\n",
+        { hint: "run valcloud auth login" },
+        "valcloud: Boom\nhint: run valcloud auth login\n",
       ],
       [
         "everything",
         { code: "rate_limited", retryAfterSeconds: 0, hint: "wait" },
-        "vcloud: rate_limited: Boom (retry after 0s)\nhint: wait\n",
+        "valcloud: rate_limited: Boom (retry after 0s)\nhint: wait\n",
       ],
     ] as const)("%s", (_label, overrides, expected) => {
       expect(formatFailure({ ...base, ...overrides }, false)).toBe(expected);
@@ -75,7 +75,7 @@ describe("failureFromTool", () => {
       kind: "auth",
       code: "unauthorized",
       message: "Bad key",
-      hint: "run 'vcloud auth login'",
+      hint: "run 'valcloud auth login'",
       retryAfterSeconds: undefined,
       rpcCode: undefined,
     });

@@ -16,7 +16,7 @@ describe("mapErrorFacts", () => {
       kind: "auth",
       code: undefined,
       message: "authentication failed (HTTP 401)",
-      hint: "run 'vcloud auth login'",
+      hint: "run 'valcloud auth login'",
       retryAfterSeconds: undefined,
       rpcCode: undefined,
     });
@@ -50,7 +50,7 @@ describe("mapErrorFacts", () => {
     expect(mapErrorFacts({ kind: "oauth", code }, stored)).toMatchObject({
       kind: "auth",
       message,
-      hint: "run 'vcloud auth login'",
+      hint: "run 'valcloud auth login'",
     });
   });
 
@@ -109,7 +109,7 @@ describe("mapErrorFacts", () => {
     ).toMatchObject({
       kind: "runtime",
       rpcCode,
-      hint: "the tool list may be out of date; run 'vcloud tools --refresh' and retry",
+      hint: "the tool list may be out of date; run 'valcloud tools --refresh' and retry",
     });
   });
 

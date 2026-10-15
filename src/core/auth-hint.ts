@@ -3,7 +3,7 @@ export type AuthHintContext = {
 };
 
 export function loginHint(): string {
-  return "run 'vcloud auth login'";
+  return "run 'valcloud auth login'";
 }
 
 export function authHint(context: AuthHintContext): string {

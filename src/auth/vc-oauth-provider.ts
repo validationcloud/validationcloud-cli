@@ -50,7 +50,7 @@ export class VcOAuthProvider implements OAuthClientProvider {
   // oxlint-disable-next-line eslint/class-methods-use-this -- OAuthClientProvider is an instance interface
   get clientMetadata(): OAuthClientMetadata {
     return {
-      client_name: "Validation Cloud CLI (vcloud)",
+      client_name: "Validation Cloud CLI (valcloud)",
       redirect_uris: [REDIRECT_URL],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],

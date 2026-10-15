@@ -16,7 +16,9 @@ import { credentialsForConnect } from "./credentials-for-connect.ts";
 async function login(context: CliContext, launchBrowser: boolean): Promise<void> {
   const { gateway, credentialStore } = context;
   if (context.usesStaticToken) {
-    context.stderr("vcloud: note: VC_TOKEN is set and takes precedence over stored credentials\n");
+    context.stderr(
+      "valcloud: note: VC_TOKEN is set and takes precedence over stored credentials\n",
+    );
   }
   await runLogin({ gateway, store: credentialStore, launchBrowser, tell: context.stderr });
 
@@ -41,7 +43,7 @@ async function logout(context: CliContext): Promise<void> {
     if (!(error instanceof CredentialsFileError)) throw error;
     // Logout is the recovery path for a corrupt file: remove it, since nothing in it can be kept.
     if (await credentialStore.discardUnreadable()) {
-      context.stderr(`vcloud: removed the unreadable credentials file (${error.filePath})\n`);
+      context.stderr(`valcloud: removed the unreadable credentials file (${error.filePath})\n`);
     }
   }
   await catalogStore.remove(gateway.url);
@@ -69,7 +71,7 @@ async function status(context: CliContext, json: boolean): Promise<void> {
   });
   context.stdout(json ? formatJson(authStatus, process.stdout.isTTY) : formatHuman(authStatus));
   if (!json && authStatus.logged_in && !authStatus.verified) {
-    context.stderr("vcloud: note: token not verified locally (no readable expiry)\n");
+    context.stderr("valcloud: note: token not verified locally (no readable expiry)\n");
   }
   if (!authStatus.logged_in) throw new SilentExitError(exitCodeFor("auth"));
 }
