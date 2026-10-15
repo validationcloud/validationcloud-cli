@@ -12,6 +12,9 @@ import { startStubMcpServer } from "./stub-mcp-server.ts";
 import type { RecordedRequest, StubMcpServer } from "./stub-mcp-server.ts";
 
 const root = join(import.meta.dirname, "..");
+// pnpm run test:bundle points this at the release bundle so the shipped artifact runs the same scenarios.
+const bundleEntry = process.env.VALCLOUD_ENTRY;
+const cliEntry = bundleEntry ?? join(root, "bin", "valcloud");
 
 // Payload {"exp":9999999999}: valid locally, yet the gateway may still answer 401.
 const UNEXPIRED_ACCESS_TOKEN = "h.eyJleHAiOjk5OTk5OTk5OTl9.s";
@@ -113,7 +116,7 @@ function cliEnvironment(home: string, env: Record<string, string | undefined> = 
 function runCli(args: string[], options: CliOptions = {}): Promise<CliRun> {
   return collect(
     process.execPath,
-    [...(options.nodeArgs ?? []), join(root, "bin", "valcloud"), ...args],
+    [...(options.nodeArgs ?? []), cliEntry, ...args],
     {
       env: cliEnvironment(options.home ?? sharedHome, options.env),
       stdin: options.stdin,
@@ -132,14 +135,7 @@ async function runCliInPty(
 ): Promise<PtyRun> {
   const run = await collect(
     "python3",
-    [
-      "-I",
-      join(root, "test", "pty-run.py"),
-      answer,
-      process.execPath,
-      join(root, "bin", "valcloud"),
-      ...args,
-    ],
+    ["-I", join(root, "test", "pty-run.py"), answer, process.execPath, cliEntry, ...args],
     { env: cliEnvironment(home) },
   );
   return JSON.parse(run.stdout) as PtyRun;
@@ -202,13 +198,17 @@ function proxyUrl(proxy: Server): string {
   return `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
 }
 
-beforeAll(async () => {
+async function buildFromSource(): Promise<void> {
   const build = await collect(
     join(root, "node_modules", ".bin", "tsc"),
     ["-p", "tsconfig.app.json"],
     { cwd: root, env: { PATH: process.env.PATH } },
   );
   if (build.exitCode !== 0) throw new Error(`build failed:\n${build.stdout}${build.stderr}`);
+}
+
+beforeAll(async () => {
+  await (bundleEntry === undefined ? buildFromSource() : access(bundleEntry));
   server = await startStubMcpServer();
   sharedHome = await freshHome();
 }, 120_000);

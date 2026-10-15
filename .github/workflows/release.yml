@@ -28,6 +28,9 @@ jobs:
     if: vars.NPM_TRUSTED_PUBLISHING == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      # Empty when semantic-release found nothing to release.
+      version: ${{ steps.release.outputs.version }}
     permissions:
       contents: write # create the tag and the GitHub Release
       issues: write # comment on released issues
@@ -49,15 +52,79 @@ jobs:
           echo "::error::The repository is private, so npm would publish without provenance."
           exit 1
 
+      # The release job runs on the Node.js version the installer ships, so the bundle smoke test in build-release.ts exercises the same runtime customers get.
+      - name: Read the pinned Node.js version
+        id: pinned
+        run: echo "version=$(jq -r .version scripts/node-runtime.json)" >> "$GITHUB_OUTPUT"
+
       - name: Set up the toolchain
         uses: ./.github/actions/install-workspace
+        with:
+          node-version: ${{ steps.pinned.outputs.version }}
 
       # --ignore-scripts keeps dependency lifecycle scripts, and our own `prepare` hook installer, from running here.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      # The npm publish step runs the `prepack` script, which rebuilds dist from this checkout.
+      # The npm publish step runs the `prepack` script, which rebuilds dist from this checkout. The exec plugin (release.config.js) builds the installer assets and, after the release, writes the version to this step's outputs.
       - name: Release
+        id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # pnpm 11 re-runs the install, with lifecycle scripts, before a `pnpm run` when it finds the installed dependencies out of date with the manifest (seen after a plain version edit in package.json in one run, not in another). That would undo --ignore-scripts above, so the check is off for the release.
+          pnpm_config_verify_deps_before_run: "false"
         run: pnpm exec semantic-release
+
+  # @semantic-release/github publishes a release even when an asset is missing, and npm has the version by then. This job installs from the published release in a clean container; a red job here means customers cannot install. The pinned URL names exactly this release. releases/latest is what the one-liner behind validationcloud.io/install.sh uses, but GitHub can take a while to move it, so that step waits for it to serve this version before it installs.
+  smoke-install:
+    name: Smoke-test the installer
+    needs: [release]
+    # A skipped needs result would otherwise skip this job silently; run whenever the release job succeeded and published a version.
+    if: ${{ !cancelled() && needs.release.result == 'success' && needs.release.outputs.version != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: Install from the pinned release in a clean container
+        run: |
+          docker run --rm -e VERSION -e REPOSITORY debian:12-slim bash -c '
+            set -euo pipefail
+            apt-get update -qq
+            apt-get install -y -qq curl ca-certificates >/dev/null
+            curl -fsSL "https://github.com/$REPOSITORY/releases/download/v$VERSION/install.sh" | bash
+            reported=$(/root/.local/bin/valcloud --version)
+            if [ "$reported" != "$VERSION" ]; then
+              echo "::error::The pinned installer put valcloud $reported in place, expected $VERSION."
+              exit 1
+            fi
+          '
+
+      - name: Install from releases/latest in a clean container
+        run: |
+          docker run --rm -e VERSION -e REPOSITORY debian:12-slim bash -c '
+            set -euo pipefail
+            apt-get update -qq
+            apt-get install -y -qq curl ca-certificates >/dev/null
+            url="https://github.com/$REPOSITORY/releases/latest/download/install.sh"
+            delay=5
+            for attempt in 1 2 3 4 5 6 7 8; do
+              # Not grep -q: it exits early, curl then fails writing, and pipefail turns that into a failed pipeline.
+              if curl -fsSL "$url" | grep -x "VALCLOUD_VERSION='"'"'$VERSION'"'"'" >/dev/null; then break; fi
+              if [ "$attempt" = 8 ]; then
+                echo "::error::releases/latest still does not serve the installer for $VERSION after $attempt attempts."
+                exit 1
+              fi
+              echo "releases/latest does not serve $VERSION yet; retrying in ${delay}s."
+              sleep "$delay"
+              delay=$((delay * 2))
+            done
+            curl -fsSL "$url" | bash
+            reported=$(/root/.local/bin/valcloud --version)
+            if [ "$reported" != "$VERSION" ]; then
+              echo "::error::releases/latest put valcloud $reported in place, expected $VERSION."
+              exit 1
+            fi
+          '

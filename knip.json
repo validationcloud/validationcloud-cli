@@ -1,7 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["src/cli.ts", "types/ts-reset.d.ts"],
-  "project": ["src/**/*.ts", "test/**/*.ts", "types/**/*.d.ts"],
+  "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts", "types/**/*.d.ts"],
+  "ignoreBinaries": ["gpg", "shellcheck"],
   "github-actions": {
     "config": [".github/workflows/*.{yml,yaml}"]
   }
