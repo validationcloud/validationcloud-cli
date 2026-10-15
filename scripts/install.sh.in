@@ -245,8 +245,10 @@ check_launcher_ownership() {
 
 # Fails early, before any download, when the launcher's directory cannot be used.
 prepare_bin_dir() {
-  mkdir -p "$BIN_DIR" && [ -w "$BIN_DIR" ] ||
-    die "cannot write to $BIN_DIR. If an earlier run with sudo created it, take it back with: sudo chown -R \"\$(id -un)\" \"$BIN_DIR\" (or set VALCLOUD_BIN_DIR to a directory you own)."
+  if mkdir -p "$BIN_DIR" && [ -w "$BIN_DIR" ]; then
+    return 0
+  fi
+  die "cannot write to $BIN_DIR. If an earlier run with sudo created it, take it back with: sudo chown -R \"\$(id -un)\" \"$BIN_DIR\" (or set VALCLOUD_BIN_DIR to a directory you own)."
 }
 
 write_launcher() {

@@ -74,22 +74,26 @@ describe("releaseAssetUrl", () => {
 });
 
 describe("running as a script", () => {
-  it("still runs main when started through a symlink", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "valcloud-symlink-"));
-    try {
-      const link = join(directory, "render-link.ts");
-      await symlink(join(import.meta.dirname, "render-installer.ts"), link);
-      const result = spawnSync(process.execPath, [link, "--no-such-option"], {
-        cwd: directory,
-        encoding: "utf8",
-      });
+  // Node 22.12, the engines floor, cannot run .ts files; release scripts run on the pinned Node.
+  it.skipIf(process.features.typescript === false)(
+    "still runs main when started through a symlink",
+    async () => {
+      const directory = await mkdtemp(join(tmpdir(), "valcloud-symlink-"));
+      try {
+        const link = join(directory, "render-link.ts");
+        await symlink(join(import.meta.dirname, "render-installer.ts"), link);
+        const result = spawnSync(process.execPath, [link, "--no-such-option"], {
+          cwd: directory,
+          encoding: "utf8",
+        });
 
-      expect({ status: result.status, stderr: result.stderr.trim() }).toStrictEqual({
-        status: 1,
-        stderr: expect.stringContaining("--no-such-option") as string,
-      });
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
+        expect({ status: result.status, stderr: result.stderr.trim() }).toStrictEqual({
+          status: 1,
+          stderr: expect.stringContaining("--no-such-option") as string,
+        });
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 });

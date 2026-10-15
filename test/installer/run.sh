@@ -38,6 +38,7 @@ new_home() {
 run_installer() {
   local installer=$1
   shift
+  # shellcheck disable=SC2002 # a pipe, as in curl | bash, not a file on stdin
   OUT=$(cat "$installer" | env -i HOME="$H" PATH="${RUN_PATH:-$BASE_PATH}" SHELL="${SHELL_UNDER_TEST-/bin/zsh}" "$@" /bin/bash 2>&1)
   RC=$?
 }
