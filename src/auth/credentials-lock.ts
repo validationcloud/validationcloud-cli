@@ -130,7 +130,7 @@ async function acquireLock(lockPath: string): Promise<() => Promise<void>> {
     }
     if (Date.now() >= deadline) {
       throw new Error(
-        `timed out after ${WAIT_BOUND_MS / 1000} s waiting for the credentials lock ${lockPath}; another vcloud process holds it (delete the file if no vcloud process is running)`,
+        `timed out after ${WAIT_BOUND_MS / 1000} s waiting for the credentials lock ${lockPath}; another valcloud process holds it (delete the file if no valcloud process is running)`,
       );
     }
     await sleep(10 + Math.floor(Math.random() * 40));

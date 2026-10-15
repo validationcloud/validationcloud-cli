@@ -18,7 +18,7 @@
     "url": "git+https://github.com/validationcloud/validationcloud-cli.git"
   },
   "bin": {
-    "vcloud": "bin/vcloud"
+    "valcloud": "bin/valcloud"
   },
   "files": [
     "bin/",
@@ -66,7 +66,7 @@
     "rebuild": "pnpm run clean && pnpm run build",
     "test": "vitest run",
     "typecheck": "tsc -b --noEmit",
-    "vcloud": "pnpm -s run rebuild && node bin/vcloud"
+    "valcloud": "pnpm -s run rebuild && node bin/valcloud"
   },
   "dependencies": {
     "@commander-js/extra-typings": "^15.0.0",

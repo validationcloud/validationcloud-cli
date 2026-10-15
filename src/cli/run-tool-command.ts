@@ -42,7 +42,7 @@ function usageFailure(spec: ToolSpec, message: string): CliFailureError {
     createFailure(
       "usage",
       message,
-      `run 'vcloud ${spec.namespace} ${spec.command} --help' for usage`,
+      `run 'valcloud ${spec.namespace} ${spec.command} --help' for usage`,
     ),
   );
 }
@@ -89,7 +89,7 @@ function refuseUnconfirmable(invocation: ToolInvocation, decision: ConfirmationD
     createFailure(
       "usage",
       `${spec.toolName} is destructive and cannot be confirmed: ${describeRefusal(decision.reason)}`,
-      `pass --yes to proceed with 'vcloud ${spec.namespace} ${spec.command}', or --dry-run to preview`,
+      `pass --yes to proceed with 'valcloud ${spec.namespace} ${spec.command}', or --dry-run to preview`,
     ),
   );
 }
@@ -101,7 +101,7 @@ async function promptForConfirmation(
   if (decision.kind !== "prompt") return;
   const { spec } = invocation;
   const answer = await confirmOnStderr(
-    `vcloud ${spec.namespace} ${spec.command} is destructive. Continue?`,
+    `valcloud ${spec.namespace} ${spec.command} is destructive. Continue?`,
   );
   if (answer === "interrupted") throw new SilentExitError(SIGINT_EXIT_CODE);
   if (answer === "no") throw new CliFailureError(createFailure("runtime", "aborted"));
@@ -123,7 +123,7 @@ async function refreshStaleCatalog(
     // The call already succeeded, so a failed cache refresh is a note on stderr rather than a failure.
     if (options.json === true) return;
     const { message } = toFailure(error, context.failureContext);
-    context.stderr(`vcloud: note: could not refresh the cached tool list (${message})\n`);
+    context.stderr(`valcloud: note: could not refresh the cached tool list (${message})\n`);
   }
 }
 

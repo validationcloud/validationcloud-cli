@@ -1,12 +1,12 @@
-# Project: `vcloud`, the Validation Cloud CLI
+# Project: `valcloud`, the Validation Cloud CLI
 
-`vcloud` is an MCP client: the tool list comes from the gateway's `tools/list` at runtime (cached for one hour), and every tool becomes a `vcloud <namespace> <command>` subcommand. Never hard-code tool names, flags or descriptions; derive them from the catalog.
+`valcloud` is an MCP client: the tool list comes from the gateway's `tools/list` at runtime (cached for one hour), and every tool becomes a `valcloud <namespace> <command>` subcommand. Never hard-code tool names, flags or descriptions; derive them from the catalog.
 
 - **Layout.** `src/core/` is pure (parsing, flag mapping, formatting, decisions) with colocated `*.test.ts`. I/O lives in `src/cli/` (commander wiring, prompts, stdin), `src/mcp/` (client, catalog cache) and `src/auth/` (OAuth, credential store, loopback listener). `src/shared/` holds neutral modules (package info, atomic file writes). `src/cli.ts` is the entry point. Layers import each other through the `#core/*`, `#cli/*`, `#mcp/*`, `#auth/*` and `#shared/*` subpath imports (the `vc-source` condition maps them to `src/` in tsc, vitest and `node --conditions=vc-source`). `src/mcp` imports nothing from `src/cli` or `src/auth`. `test/` holds the integration tests: one runs the built CLI against a local stateless MCP server, the auth ones run credential-store and refresh scenarios in child processes.
 - **Streams and exit codes.** Results go to stdout; diagnostics, prompts and hints go to stderr. Exit codes: 0 success, 1 tool or runtime error, 2 usage error (including a refused destructive call), 3 authentication required or failed. The table lives in `src/core/exit-codes.ts` and is rendered into `--help`; keep the README in step.
-- **Secrets.** Never print or log access or refresh tokens, except in `vcloud auth token`. Never write tool results to logs or the cache. `credentials.json` is written atomically with mode 0600.
+- **Secrets.** Never print or log access or refresh tokens, except in `valcloud auth token`. Never write tool results to logs or the cache. `credentials.json` is written atomically with mode 0600.
 - **Protocol.** The client pins MCP revision `2026-07-28` (stateless, no sessions) and passes the cached `server/discover` result to `connect()`. Invalidate that cache together with the catalog.
-- **Gateway.** The CLI talks to one built-in gateway, `https://mcp.validationcloud.io/mcp`. `VC_MCP_URL` replaces it for a run (point vcloud at a different MCP gateway: development, self-hosted). Credentials and the catalog cache are keyed by the normalised gateway URL (`new URL(x).toString()`), so each gateway has separate logins and catalogs.
+- **Gateway.** The CLI talks to one built-in gateway, `https://mcp.validationcloud.io/mcp`. `VC_MCP_URL` replaces it for a run (point valcloud at a different MCP gateway: development, self-hosted). Credentials and the catalog cache are keyed by the normalised gateway URL (`new URL(x).toString()`), so each gateway has separate logins and catalogs.
 - **Checks.** Run `pnpm run knip`, `format:check`, `typecheck`, `lint`, `fta`, `build` and `test` before pushing; CI runs the same list.
 
 # Rule: Avoid Leaky Abstractions

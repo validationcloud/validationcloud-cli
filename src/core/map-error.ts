@@ -94,7 +94,7 @@ function protocolFailure(rpcCode: number, message: string): CliFailure {
     code: "protocol_error",
     message: `${message} (JSON-RPC error ${rpcCode})`,
     hint: staleCatalog
-      ? "the tool list may be out of date; run 'vcloud tools --refresh' and retry"
+      ? "the tool list may be out of date; run 'valcloud tools --refresh' and retry"
       : undefined,
     retryAfterSeconds: undefined,
     rpcCode,

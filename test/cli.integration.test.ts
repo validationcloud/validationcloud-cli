@@ -74,7 +74,7 @@ function cliEnvironment(home: string, env: Record<string, string | undefined> = 
 }
 
 function runCli(args: string[], options: CliOptions = {}): Promise<CliRun> {
-  return collect(process.execPath, [join(root, "bin", "vcloud"), ...args], {
+  return collect(process.execPath, [join(root, "bin", "valcloud"), ...args], {
     env: cliEnvironment(options.home ?? sharedHome, options.env),
     stdin: options.stdin,
     keepStdinOpen: options.keepStdinOpen,
@@ -93,7 +93,7 @@ async function runCliInPty(
       join(root, "test", "pty-run.py"),
       answer,
       process.execPath,
-      join(root, "bin", "vcloud"),
+      join(root, "bin", "valcloud"),
       ...args,
     ],
     { env: cliEnvironment(home) },
@@ -158,7 +158,7 @@ afterAll(async () => {
   await Promise.all(createdHomes.map((created) => rm(created, { recursive: true, force: true })));
 });
 
-describe("vcloud tool calls against a stateless MCP server", () => {
+describe("valcloud tool calls against a stateless MCP server", () => {
   it("prints a read-only result as a TSV table", async () => {
     const run = await runCli(["demo", "list-items"]);
 
@@ -195,7 +195,7 @@ describe("vcloud tool calls against a stateless MCP server", () => {
     expect(run).toStrictEqual({
       exitCode: 1,
       stdout: "",
-      stderr: "vcloud: not_found: item not found\n",
+      stderr: "valcloud: not_found: item not found\n",
     });
   });
 
@@ -257,25 +257,25 @@ describe("destructive confirmation", () => {
       "there is no terminal",
       ["demo", "delete-item", "a1"],
       {},
-      "vcloud: demo.delete_item is destructive and cannot be confirmed: there is no terminal to confirm on\nhint: pass --yes to proceed with 'vcloud demo delete-item', or --dry-run to preview\n",
+      "valcloud: demo.delete_item is destructive and cannot be confirmed: there is no terminal to confirm on\nhint: pass --yes to proceed with 'valcloud demo delete-item', or --dry-run to preview\n",
     ],
     [
       "CI is set",
       ["demo", "delete-item", "a1"],
       { env: { CI: "true" } },
-      "vcloud: demo.delete_item is destructive and cannot be confirmed: CI is set\nhint: pass --yes to proceed with 'vcloud demo delete-item', or --dry-run to preview\n",
+      "valcloud: demo.delete_item is destructive and cannot be confirmed: CI is set\nhint: pass --yes to proceed with 'valcloud demo delete-item', or --dry-run to preview\n",
     ],
     [
       "--no-interactive is given",
       ["demo", "delete-item", "a1", "--no-interactive"],
       {},
-      "vcloud: demo.delete_item is destructive and cannot be confirmed: --no-interactive was given\nhint: pass --yes to proceed with 'vcloud demo delete-item', or --dry-run to preview\n",
+      "valcloud: demo.delete_item is destructive and cannot be confirmed: --no-interactive was given\nhint: pass --yes to proceed with 'valcloud demo delete-item', or --dry-run to preview\n",
     ],
     [
       "--input - consumed stdin",
       ["demo", "delete-item", "--input", "-"],
       { stdin: '{"id":"a1"}' },
-      "vcloud: demo.delete_item is destructive and cannot be confirmed: --input - takes its input from standard input\nhint: pass --yes to proceed with 'vcloud demo delete-item', or --dry-run to preview\n",
+      "valcloud: demo.delete_item is destructive and cannot be confirmed: --input - takes its input from standard input\nhint: pass --yes to proceed with 'valcloud demo delete-item', or --dry-run to preview\n",
     ],
   ] as const)(
     "refuses without --yes and names the reason when %s",
@@ -309,7 +309,7 @@ describe("destructive confirmation", () => {
     const run = await runCliInPty("y", ["demo", "delete-item", "a1"], await freshHome());
 
     expect(run).toMatchObject({ exitCode: 0, timedOut: false, stdout: "deleted\ta1\n" });
-    expect(run.terminal).toContain("vcloud demo delete-item is destructive. Continue? [y/N] ");
+    expect(run.terminal).toContain("valcloud demo delete-item is destructive. Continue? [y/N] ");
     expect(toolCalls()).toHaveLength(1);
   });
 
@@ -317,7 +317,7 @@ describe("destructive confirmation", () => {
     const run = await runCliInPty("n", ["demo", "delete-item", "a1"], await freshHome());
 
     expect(run).toMatchObject({ exitCode: 1, timedOut: false, stdout: "" });
-    expect(run.terminal).toContain("vcloud: aborted");
+    expect(run.terminal).toContain("valcloud: aborted");
     expect(toolCalls()).toStrictEqual([]);
   });
 
@@ -325,7 +325,7 @@ describe("destructive confirmation", () => {
     const run = await runCliInPty("eof", ["demo", "delete-item", "a1"], await freshHome());
 
     expect(run).toMatchObject({ exitCode: 1, timedOut: false, stdout: "" });
-    expect(run.terminal).toContain("vcloud: aborted");
+    expect(run.terminal).toContain("valcloud: aborted");
     expect(toolCalls()).toStrictEqual([]);
   });
 
@@ -383,7 +383,7 @@ describe("catalog cache", () => {
       exitCode: 1,
       stdout: "",
       stderr:
-        "vcloud: protocol_error: Tool demo.ghost not found (JSON-RPC error -32602)\nhint: the tool list may be out of date; run 'vcloud tools --refresh' and retry\n",
+        "valcloud: protocol_error: Tool demo.ghost not found (JSON-RPC error -32602)\nhint: the tool list may be out of date; run 'valcloud tools --refresh' and retry\n",
     });
     expect(second.exitCode).toBe(0);
     expect(rpcMethods()).toStrictEqual(["server/discover", "tools/list", "tools/call"]);
@@ -402,16 +402,16 @@ describe("catalog cache", () => {
         code: "protocol_error",
         message: "Tool demo.ghost not found (JSON-RPC error -32602)",
         rpc_code: -32_602,
-        hint: "the tool list may be out of date; run 'vcloud tools --refresh' and retry",
+        hint: "the tool list may be out of date; run 'valcloud tools --refresh' and retry",
       },
     });
   });
 });
 
-describe("vcloud tools", () => {
+describe("valcloud tools", () => {
   const unmappedNotes =
-    "vcloud: note: demo.listItems has no command: the command 'vcloud demo list-items' is already taken by demo.list_items\n" +
-    "vcloud: note: auth.status has no command: the namespace 'auth' is a built-in vcloud command\n";
+    "valcloud: note: demo.listItems has no command: the command 'valcloud demo list-items' is already taken by demo.list_items\n" +
+    "valcloud: note: auth.status has no command: the namespace 'auth' is a built-in valcloud command\n";
 
   it("lists the tool commands with their safety flags and the unmapped tools on stderr", async () => {
     const run = await runCli(["tools"], { home: await freshHome() });
@@ -436,9 +436,9 @@ describe("vcloud tools", () => {
       unmapped: [
         {
           tool: "demo.listItems",
-          reason: "the command 'vcloud demo list-items' is already taken by demo.list_items",
+          reason: "the command 'valcloud demo list-items' is already taken by demo.list_items",
         },
-        { tool: "auth.status", reason: "the namespace 'auth' is a built-in vcloud command" },
+        { tool: "auth.status", reason: "the namespace 'auth' is a built-in valcloud command" },
       ],
     });
   });
@@ -455,7 +455,7 @@ describe("failure reporting", () => {
       exitCode: 3,
       stdout: "",
       stderr:
-        "vcloud: the gateway rejected VC_TOKEN (HTTP 401)\nhint: fix or unset VC_TOKEN (stored credentials are used when it is unset)\n",
+        "valcloud: the gateway rejected VC_TOKEN (HTTP 401)\nhint: fix or unset VC_TOKEN (stored credentials are used when it is unset)\n",
     });
   });
 
@@ -468,7 +468,7 @@ describe("failure reporting", () => {
       exitCode: 3,
       stdout: "",
       stderr:
-        "vcloud: not logged in to https://mcp.example.test/mcp, so tool commands are unavailable\nhint: run 'vcloud auth login'\n",
+        "valcloud: not logged in to https://mcp.example.test/mcp, so tool commands are unavailable\nhint: run 'valcloud auth login'\n",
     });
   });
 
@@ -482,7 +482,7 @@ describe("failure reporting", () => {
 
     expect(run.exitCode).toBe(1);
     expect(run.stderr).toBe(
-      `vcloud: cannot reach ${url} (ECONNREFUSED)\nhint: check your network, or set VC_MCP_URL to another gateway\n`,
+      `valcloud: cannot reach ${url} (ECONNREFUSED)\nhint: check your network, or set VC_MCP_URL to another gateway\n`,
     );
   });
 
@@ -494,7 +494,7 @@ describe("failure reporting", () => {
     expect(run).toStrictEqual({
       exitCode: 2,
       stdout: "",
-      stderr: "vcloud: VC_MCP_URL must not contain credentials (user:password@)\n",
+      stderr: "valcloud: VC_MCP_URL must not contain credentials (user:password@)\n",
     });
   });
 
@@ -504,7 +504,7 @@ describe("failure reporting", () => {
     expect(run).toStrictEqual({
       exitCode: 2,
       stdout: "",
-      stderr: "vcloud: unknown option '--bogus'\n(add --help for additional information)\n",
+      stderr: "valcloud: unknown option '--bogus'\n(add --help for additional information)\n",
     });
   });
 
@@ -517,7 +517,7 @@ describe("failure reporting", () => {
     expect(run).toStrictEqual({
       exitCode: 2,
       stdout: "",
-      stderr: "vcloud: unknown option '--env'\n(add --help for additional information)\n",
+      stderr: "valcloud: unknown option '--env'\n(add --help for additional information)\n",
     });
   });
 
@@ -532,24 +532,24 @@ describe("failure reporting", () => {
   });
 });
 
-describe("vcloud --help", () => {
+describe("valcloud --help", () => {
   it("lists generic examples instead of tool names", async () => {
     const run = await runCli(["--help"]);
 
     expect(run.exitCode).toBe(0);
-    expect(run.stdout).toContain("vcloud <namespace> <command> --help");
+    expect(run.stdout).toContain("valcloud <namespace> <command> --help");
     expect(run.stdout).not.toContain("nodeapi");
   });
 
   it("documents VC_MCP_URL and has no --env flag", async () => {
     const run = await runCli(["--help"]);
 
-    expect(run.stdout).toContain("VC_MCP_URL  Point vcloud at a different MCP gateway");
+    expect(run.stdout).toContain("VC_MCP_URL  Point valcloud at a different MCP gateway");
     expect(run.stdout).not.toContain("--env");
   });
 });
 
-describe("vcloud auth status", () => {
+describe("valcloud auth status", () => {
   it("shows the built-in gateway URL by default", async () => {
     const run = await runCli(["auth", "status", "--json"], {
       home: await freshHome(),
@@ -575,7 +575,7 @@ describe("vcloud auth status", () => {
     const run = await runCli(["auth", "status"], { home: await freshHome() });
 
     expect(run.exitCode).toBe(0);
-    expect(run.stderr).toBe("vcloud: note: token not verified locally (no readable expiry)\n");
+    expect(run.stderr).toBe("valcloud: note: token not verified locally (no readable expiry)\n");
   });
 });
 
@@ -586,8 +586,8 @@ describe("a corrupt credentials.json", () => {
     const home = await freshHome();
     const directory =
       process.platform === "darwin"
-        ? join(home, "Library", "Preferences", "vcloud")
-        : join(home, "config", "vcloud");
+        ? join(home, "Library", "Preferences", "valcloud")
+        : join(home, "config", "valcloud");
     await mkdir(directory, { recursive: true });
     const file = join(directory, "credentials.json");
     await writeFile(
@@ -603,7 +603,7 @@ describe("a corrupt credentials.json", () => {
     const run = await runCli(["--help"], { home, env: { VC_TOKEN: undefined } });
 
     expect(run.exitCode).toBe(0);
-    expect(run.stdout).toContain("Usage: vcloud");
+    expect(run.stdout).toContain("Usage: valcloud");
     expect(run.stdout).toContain("Tool commands could not be loaded (credentials file");
     expect(run.stdout).not.toContain(secretFragment);
     expect(run.stderr).toBe("");
@@ -616,7 +616,7 @@ describe("a corrupt credentials.json", () => {
 
     expect(run.exitCode).toBe(1);
     expect(run.stderr).toContain(file);
-    expect(run.stderr).toContain("vcloud auth logout");
+    expect(run.stderr).toContain("valcloud auth logout");
     expect(run.stderr).not.toContain(secretFragment);
     expect(run.stderr).not.toContain("JSON");
   });
@@ -627,7 +627,7 @@ describe("a corrupt credentials.json", () => {
     const run = await runCli(["auth", "logout"], { home, env: { VC_TOKEN: undefined } });
 
     expect(run.exitCode).toBe(0);
-    expect(run.stderr).toBe(`vcloud: removed the unreadable credentials file (${file})\n`);
+    expect(run.stderr).toBe(`valcloud: removed the unreadable credentials file (${file})\n`);
     await expect(access(file)).rejects.toThrow("ENOENT");
   });
 });

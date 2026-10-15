@@ -73,11 +73,11 @@ describe("login loopback listener", () => {
       get(`http://127.0.0.1:${port}/callback?code=evil&state=%3Cscript%3Eforged`),
     ).resolves.toStrictEqual({
       status: 400,
-      body: "This callback does not belong to the pending vcloud login.\n",
+      body: "This callback does not belong to the pending valcloud login.\n",
     });
     await expect(get(`http://127.0.0.1:${port}/callback?code=evil`)).resolves.toStrictEqual({
       status: 400,
-      body: "This callback does not belong to the pending vcloud login.\n",
+      body: "This callback does not belong to the pending valcloud login.\n",
     });
     const { status, body } = await get(
       `http://127.0.0.1:${port}/callback?code=good&state=${EXPECTED_STATE}`,
@@ -126,7 +126,7 @@ describe("login loopback listener", () => {
       get(`http://127.0.0.1:${port}/callback?error=access_denied&state=forged`),
     ).resolves.toStrictEqual({
       status: 400,
-      body: "This callback does not belong to the pending vcloud login.\n",
+      body: "This callback does not belong to the pending valcloud login.\n",
     });
     await get(`http://127.0.0.1:${port}/callback?code=good&state=${EXPECTED_STATE}`);
     const params = await callback;
@@ -148,7 +148,7 @@ describe("login loopback listener", () => {
     await listen(blocker, "127.0.0.1", port);
 
     await expect(start(port)).rejects.toThrow(
-      /^127\.0\.0\.1:\d+ is already in use; vcloud needs port \d+ free on 127\.0\.0\.1 and ::1 for the login callback/u,
+      /^127\.0\.0\.1:\d+ is already in use; valcloud needs port \d+ free on 127\.0\.0\.1 and ::1 for the login callback/u,
     );
   });
 

@@ -14,20 +14,20 @@ export type CatalogAvailability =
   | { kind: "unavailable"; note: string };
 
 const ROOT_HELP_FOOTER = `
-Tool commands come from the gateway's tool list, so 'vcloud <namespace> --help'
-shows what your account can call. Run 'vcloud tools' for the full list.
+Tool commands come from the gateway's tool list, so 'valcloud <namespace> --help'
+shows what your account can call. Run 'valcloud tools' for the full list.
 
 Examples:
-  vcloud auth login
-  vcloud tools
-  vcloud <namespace> --help
-  vcloud <namespace> <command> --help
-  vcloud <namespace> <command> --json
-  vcloud tools | tail -n +2 | cut -f1 | sort | uniq -c
+  valcloud auth login
+  valcloud tools
+  valcloud <namespace> --help
+  valcloud <namespace> <command> --help
+  valcloud <namespace> <command> --json
+  valcloud tools | tail -n +2 | cut -f1 | sort | uniq -c
 
 Environment variables:
   VC_TOKEN    Bearer token to use instead of stored credentials; never refreshed
-  VC_MCP_URL  Point vcloud at a different MCP gateway (development, self-hosted)
+  VC_MCP_URL  Point valcloud at a different MCP gateway (development, self-hosted)
   CI          When set, destructive commands never prompt; pass --yes`;
 
 const USAGE_ERROR_HINT = "(add --help for additional information)";
@@ -37,7 +37,7 @@ Exit codes:
 ${renderExitCodeHelp()}`;
 
 export function buildProgram(context: CliContext, availability: CatalogAvailability): Command {
-  const program = new Command("vcloud")
+  const program = new Command("valcloud")
     .description(packageInfo.description)
     .version(packageInfo.version, "-V, --version", "Print the version")
     .helpCommand(false)
@@ -51,7 +51,7 @@ export function buildProgram(context: CliContext, availability: CatalogAvailabil
         write(
           context.wantsJson
             ? formatFailure(createFailure("usage", text), true)
-            : `vcloud: ${text}\n${USAGE_ERROR_HINT}\n`,
+            : `valcloud: ${text}\n${USAGE_ERROR_HINT}\n`,
         );
       },
     })

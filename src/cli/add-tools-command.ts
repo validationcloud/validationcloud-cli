@@ -53,7 +53,7 @@ export function addToolsCommand(program: Command, context: CliContext): void {
       }
       context.stdout(formatHuman(rows));
       for (const { toolName, reason } of unmapped) {
-        context.stderr(`vcloud: note: ${toolName} has no command: ${reason}\n`);
+        context.stderr(`valcloud: note: ${toolName} has no command: ${reason}\n`);
       }
     });
 }

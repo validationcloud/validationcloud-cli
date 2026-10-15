@@ -61,7 +61,7 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
-describe("concurrent vcloud processes sharing credentials.json", () => {
+describe("concurrent valcloud processes sharing credentials.json", () => {
   it("refreshes expired credentials once when two processes need them at the same time", async () => {
     server = await startMockAuthorizationServer({ refreshDelayMs: 300, reuseDelayMs: 0 });
     await seedExpiredCredentials(server);
