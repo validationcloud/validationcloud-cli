@@ -18,9 +18,16 @@ runs:
         node-version-file: ${{ inputs.node-version == '' && '.node-version' || '' }}
 
     - name: Set up the pinned pnpm
+      if: runner.os != 'macOS' || runner.arch != 'X64'
       uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
       with:
         # The version comes from the root `packageManager` field.
         install: false
         cache: true
         require-lockfile: true
+
+    # pnpm/setup downloads the standalone pnpm 11 binary, which crashes on Intel macOS (pnpm/pnpm#11423); the npm package runs on the system Node.js.
+    - name: Install the pinned pnpm with npm
+      if: runner.os == 'macOS' && runner.arch == 'X64'
+      shell: bash
+      run: npm install --global "pnpm@$(jq -r '.packageManager | ltrimstr("pnpm@")' package.json)"
