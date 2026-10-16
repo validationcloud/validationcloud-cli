@@ -114,18 +114,14 @@ function cliEnvironment(home: string, env: Record<string, string | undefined> = 
 }
 
 function runCli(args: string[], options: CliOptions = {}): Promise<CliRun> {
-  return collect(
-    process.execPath,
-    [...(options.nodeArgs ?? []), cliEntry, ...args],
-    {
-      env: cliEnvironment(options.home ?? sharedHome, options.env),
-      stdin: options.stdin,
-      keepStdinOpen: options.keepStdinOpen,
-      killAfterMs: options.killAfterMs,
-      stdoutReadDelayMs: options.stdoutReadDelayMs,
-      closeStdoutAtOnce: options.closeStdoutAtOnce,
-    },
-  );
+  return collect(process.execPath, [...(options.nodeArgs ?? []), cliEntry, ...args], {
+    env: cliEnvironment(options.home ?? sharedHome, options.env),
+    stdin: options.stdin,
+    keepStdinOpen: options.keepStdinOpen,
+    killAfterMs: options.killAfterMs,
+    stdoutReadDelayMs: options.stdoutReadDelayMs,
+    closeStdoutAtOnce: options.closeStdoutAtOnce,
+  });
 }
 
 async function runCliInPty(
@@ -629,7 +625,7 @@ describe.skipIf(!process.allowedNodeEnvironmentFlags.has("--use-env-proxy"))(
     async function runBehindProxy(args: string[], proxy: string, env: Record<string, string> = {}) {
       return runCli(args, {
         home: await freshHome(),
-        nodeArgs: ["--use-env-proxy"],
+        nodeArgs: ["--use-env-proxy", "--use-system-ca"],
         killAfterMs: 20_000,
         env: {
           VC_MCP_URL: unreachableGateway,
@@ -677,7 +673,7 @@ describe.skipIf(!process.allowedNodeEnvironmentFlags.has("--use-env-proxy"))(
 
       const run = await runCli(["demo", "get-item", "a1"], {
         home,
-        nodeArgs: ["--use-env-proxy"],
+        nodeArgs: ["--use-env-proxy", "--use-system-ca"],
         killAfterMs: 20_000,
         env: { HTTP_PROXY: proxy, VC_REQUEST_TIMEOUT_MS: String(timeoutMs) },
       });
