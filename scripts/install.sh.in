@@ -1,0 +1,482 @@
+#!/bin/bash
+# valcloud installer: curl -fsSL https://validationcloud.io/install.sh | bash
+# Rendered per release by scripts/render-installer.ts, which fills in the @...@ placeholders below;
+# the template is not meant to be run. The pinned Node.js version and hashes come from scripts/node-runtime.json.
+set -euo pipefail
+
+VALCLOUD_VERSION='@VALCLOUD_VERSION@'
+VALCLOUD_SHA256='@VALCLOUD_SHA256@'
+VALCLOUD_URL='@VALCLOUD_URL@'
+NODE_VERSION='@NODE_VERSION@'
+NODE_BASE='@NODE_BASE@'
+NODE_SHA256_DARWIN_ARM64='@NODE_SHA256_DARWIN_ARM64@'
+NODE_SHA256_DARWIN_X64='@NODE_SHA256_DARWIN_X64@'
+NODE_SHA256_LINUX_X64='@NODE_SHA256_LINUX_X64@'
+NODE_SHA256_LINUX_ARM64='@NODE_SHA256_LINUX_ARM64@'
+NODE_SHA256_LINUX_X64_MUSL='@NODE_SHA256_LINUX_X64_MUSL@'
+MARKER='# managed by the valcloud installer'
+PROFILE_MARKER='# added by the valcloud installer'
+INSTALL_MARKER_FILE='.valcloud-installer'
+LAUNCHERS_FILE='.valcloud-launchers'
+NPM_HINT='Alternative for Node.js >= 22.12 users: npm install -g @validationcloud/cli'
+WORK=''
+LAUNCHER_TMP=''
+
+node_sha256() {
+  case "$1" in
+    darwin-arm64) printf '%s\n' "$NODE_SHA256_DARWIN_ARM64" ;;
+    darwin-x64) printf '%s\n' "$NODE_SHA256_DARWIN_X64" ;;
+    linux-x64) printf '%s\n' "$NODE_SHA256_LINUX_X64" ;;
+    linux-arm64) printf '%s\n' "$NODE_SHA256_LINUX_ARM64" ;;
+    linux-x64-musl) printf '%s\n' "$NODE_SHA256_LINUX_X64_MUSL" ;;
+    *) return 1 ;;
+  esac
+}
+
+say() { printf '%s\n' "$*" >&2; }
+die() {
+  say "valcloud install failed: $*"
+  exit 1
+}
+
+# The first lines of a failed command's output, and a hint when NODE_OPTIONS may be involved.
+explain() { # output
+  printf '%s\n' "$1" | sed -n '1,10p'
+  if [ -n "${NODE_OPTIONS:-}" ]; then
+    printf 'NODE_OPTIONS is set (%s); it also applies to the Node.js that valcloud uses and may be the cause.\n' "$NODE_OPTIONS"
+  fi
+}
+
+download() { # url dest what
+  local progress=-s
+  if [ -t 2 ]; then progress=-#; fi
+  curl -fL "$progress" --proto-redir '=https' --retry 2 -o "$2" "$1" ||
+    die "could not download $3 from $1. Check your network connection (and any proxy settings) and run the installer again."
+}
+
+# The file is read from stdin so that a path with a backslash cannot change the hash line.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum <"$1" | cut -d' ' -f1
+  else
+    shasum -a 256 <"$1" | cut -d' ' -f1
+  fi
+}
+
+verify() { # file expected what
+  local actual
+  actual=$(sha256_of "$1")
+  [ "$actual" = "$2" ] ||
+    die "checksum mismatch for $3 (expected $2, got $actual). The download was corrupted or tampered with; valcloud was not installed or changed. Run the installer again."
+}
+
+# The pinned Node.js binaries are built for macOS 13.5 and newer (minos, checked again on every Node.js bump).
+check_macos_version() {
+  local version major minor
+  version=$(sw_vers -productVersion 2>/dev/null || true)
+  major=${version%%.*}
+  minor=0
+  case "$version" in
+    *.*)
+      minor=${version#*.}
+      minor=${minor%%.*}
+      ;;
+  esac
+  case "$major$minor" in '' | *[!0-9]*) die "could not read the macOS version (sw_vers -productVersion printed '$version')." ;; esac
+  if [ "$major" -lt 13 ] || { [ "$major" -eq 13 ] && [ "$minor" -lt 5 ]; }; then
+    die "macOS $version is too old; valcloud's Node.js runtime needs macOS 13.5 or newer. $NPM_HINT"
+  fi
+}
+
+# glibc is decided first: glibc systems may also have the musl package installed (musl-tools), which provides /lib/ld-musl-*.
+detect_linux_libc() { # arch; sets PLATFORM
+  local libc_version minor
+  libc_version=$(getconf GNU_LIBC_VERSION 2>/dev/null | sed -n 's/^glibc //p' || true)
+  if [ -n "$libc_version" ]; then
+    minor=${libc_version#*.}
+    minor=${minor%%.*}
+    if [ "${libc_version%%.*}" -lt 2 ] || { [ "${libc_version%%.*}" -eq 2 ] && [ "$minor" -lt 28 ]; }; then
+      die "this system has glibc $libc_version; valcloud's Node.js runtime needs glibc 2.28 or newer (Ubuntu 20.04+, Debian 10+, RHEL/Rocky 8+, Amazon Linux 2023)."
+    fi
+  elif ls /lib/ld-musl-* >/dev/null 2>&1; then
+    [ "$1" = x64 ] || die "Linux with musl libc (e.g. Alpine) is supported only on x86_64."
+    PLATFORM=linux-x64-musl
+    [ -e /usr/lib/libstdc++.so.6 ] || [ -e /lib/libstdc++.so.6 ] ||
+      die "the Node.js runtime needs libstdc++ on musl systems. On Alpine run: apk add libstdc++"
+  else
+    die "could not determine the C library (getconf GNU_LIBC_VERSION failed and there is no musl loader). valcloud needs glibc 2.28 or newer, or musl on x86_64."
+  fi
+}
+
+# Under sudo, HOME may still be the user's while the process is root, which leaves root-owned files in the user's home (or installs for root only).
+check_not_sudo() {
+  if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then
+    die "this is running as root through sudo, which would install valcloud for root or leave root-owned files in $HOME. Run it as your own user: curl -fsSL https://validationcloud.io/install.sh | bash"
+  fi
+  if [ ! -O "$HOME" ]; then
+    die "$HOME is not owned by the user running the installer. Run it as the owner of $HOME (without sudo)."
+  fi
+}
+
+detect_platform() {
+  local os arch
+  os=$(uname -s)
+  arch=$(uname -m)
+  case "$os" in
+    Darwin)
+      [ "$(id -u)" != 0 ] || die "do not run the installer as root (sudo) on macOS; run it as your own user."
+      check_macos_version
+      os=darwin
+      ;;
+    Linux) os=linux ;;
+    *) die "unsupported operating system: $os. $NPM_HINT" ;;
+  esac
+  case "$arch" in
+    x86_64 | amd64) arch=x64 ;;
+    arm64 | aarch64) arch=arm64 ;;
+    *) die "unsupported CPU architecture: $arch. $NPM_HINT" ;;
+  esac
+  if [ "$os" = darwin ] && [ "$arch" = x64 ] && [ "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" = 1 ]; then
+    arch=arm64 # Rosetta shell on Apple silicon: use the native build
+  fi
+  PLATFORM="$os-$arch"
+  if [ "$os" = linux ]; then detect_linux_libc "$arch"; fi
+}
+
+# Prints the install command for the first package manager found.
+package_hint() { # packages...
+  local manager
+  for manager in apt-get dnf microdnf yum; do
+    if command -v "$manager" >/dev/null 2>&1; then
+      printf '%s install -y %s' "$manager" "$*"
+      return
+    fi
+  done
+  if command -v apk >/dev/null 2>&1; then
+    printf 'apk add %s' "$*"
+    return
+  fi
+  printf 'install %s with your package manager' "$*"
+}
+
+check_tools() {
+  local missing='' packages='' tool
+  for tool in curl tar gzip uname mktemp; do
+    command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+  done
+  command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || missing="$missing sha256sum"
+  [ -n "$missing" ] || return 0
+  for tool in $missing; do
+    case "$tool" in
+      uname | mktemp | sha256sum) tool=coreutils ;;
+    esac
+    case " $packages " in *" $tool "*) ;; *) packages="$packages $tool" ;; esac
+  done
+  die "missing required tools:$missing. Install them (for example: $(package_hint "${packages# }")) and run the installer again."
+}
+
+# Single-quote a value for a POSIX sh script.
+sh_quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+install_runtime() { # sets NODE
+  local rt="$INSTALL_DIR/runtime/node-v$NODE_VERSION-$PLATFORM" name="node-v$NODE_VERSION-$PLATFORM" expected
+  NODE="$rt/bin/node"
+  if [ "$("$NODE" --version 2>/dev/null || true)" = "v$NODE_VERSION" ]; then return; fi
+  expected=$(node_sha256 "$PLATFORM") || die "no Node.js build pinned for $PLATFORM. $NPM_HINT"
+  say "Downloading the Node.js $NODE_VERSION runtime for valcloud (about 55 MB)..."
+  download "$NODE_BASE/v$NODE_VERSION/$name.tar.gz" "$WORK/node.tar.gz" "the Node.js runtime"
+  verify "$WORK/node.tar.gz" "$expected" "the Node.js runtime"
+  tar -xzf "$WORK/node.tar.gz" -C "$WORK" "$name/bin/node" "$name/LICENSE" ||
+    die "could not unpack the Node.js runtime into $WORK (is the disk full?)."
+  local out
+  if ! out=$("$WORK/$name/bin/node" --version 2>&1); then
+    die "the Node.js runtime does not start on this system:
+$(explain "$out")"
+  fi
+  rm -rf "$rt" || die "could not remove the incomplete runtime at $rt. Check that you own $INSTALL_DIR, then run the installer again."
+  mkdir -p "$INSTALL_DIR/runtime" || die "could not create $INSTALL_DIR/runtime. Check that you own $INSTALL_DIR (sudo chown -R \"\$(id -un)\" \"$INSTALL_DIR\"), then run the installer again."
+  mv "$WORK/$name" "$rt" || die "could not move the Node.js runtime into $rt. Check the free disk space and that you own $INSTALL_DIR, then run the installer again."
+}
+
+install_app() { # sets APP
+  APP="$INSTALL_DIR/lib/valcloud-$VALCLOUD_VERSION.mjs"
+  if [ -f "$APP" ] && [ "$(sha256_of "$APP")" = "$VALCLOUD_SHA256" ]; then return; fi
+  say "Downloading valcloud $VALCLOUD_VERSION..."
+  download "$VALCLOUD_URL" "$WORK/valcloud.mjs" "valcloud"
+  verify "$WORK/valcloud.mjs" "$VALCLOUD_SHA256" "valcloud"
+  local out
+  out=$("$NODE" "$WORK/valcloud.mjs" --version 2>&1 || true)
+  [ "$out" = "$VALCLOUD_VERSION" ] ||
+    die "the downloaded valcloud did not report version $VALCLOUD_VERSION. Its output was:
+$(explain "$out")"
+  mkdir -p "$INSTALL_DIR/lib" || die "could not create $INSTALL_DIR/lib. Check that you own $INSTALL_DIR (sudo chown -R \"\$(id -un)\" \"$INSTALL_DIR\"), then run the installer again."
+  mv -f "$WORK/valcloud.mjs" "$APP" || die "could not move valcloud into $APP. Check the free disk space and that you own $INSTALL_DIR, then run the installer again."
+}
+
+# An existing, non-empty directory is only used when an earlier run of this installer created it. Checked before the bin dir is created, which may lie inside it.
+check_install_dir() {
+  if [ -e "$INSTALL_DIR" ] && [ ! -d "$INSTALL_DIR" ]; then
+    die "$INSTALL_DIR exists and is not a directory."
+  fi
+  if [ -d "$INSTALL_DIR" ] && [ ! -f "$INSTALL_DIR/$INSTALL_MARKER_FILE" ] && [ -n "$(ls -A "$INSTALL_DIR")" ]; then
+    die "$INSTALL_DIR is not empty and was not created by this installer, so it is left alone. Set VALCLOUD_INSTALL_DIR to an empty or new directory and run the installer again."
+  fi
+}
+
+claim_install_dir() {
+  mkdir -p "$INSTALL_DIR" || die "cannot create $INSTALL_DIR. Check its parent directory, or set VALCLOUD_INSTALL_DIR to a directory you own."
+  printf '%s\n' 'This directory is managed by the valcloud installer.' >"$INSTALL_DIR/$INSTALL_MARKER_FILE" ||
+    die "cannot write to $INSTALL_DIR. If an earlier run with sudo created it, take it back with: sudo chown -R \"\$(id -un)\" \"$INSTALL_DIR\""
+}
+
+# Runs on EXIT, where errexit would turn a failed delete into the script's exit status.
+cleanup() {
+  set +e
+  if [ -n "$WORK" ]; then rm -rf "$WORK" || say "Warning: could not remove the temporary directory $WORK; it is safe to delete."; fi
+  if [ -n "$LAUNCHER_TMP" ]; then rm -f "$LAUNCHER_TMP" || say "Warning: could not remove the temporary file $LAUNCHER_TMP; it is safe to delete."; fi
+}
+
+# Cleanup keeps what every recorded launcher names, so one left in an earlier VALCLOUD_BIN_DIR keeps working.
+record_launcher() {
+  local file="$INSTALL_DIR/$LAUNCHERS_FILE"
+  if [ -f "$file" ] && grep -qxF "$LAUNCHER" "$file"; then return 0; fi
+  printf '%s\n' "$LAUNCHER" >>"$file" || die "cannot write $file. Check that you own $INSTALL_DIR, then run the installer again."
+}
+
+previous_version() {
+  [ -f "$LAUNCHER" ] || return 0
+  sed -n "s|.*/valcloud-\(.*\)\.mjs' \"\$@\"\$|\1|p" "$LAUNCHER"
+}
+
+check_launcher_ownership() {
+  if [ -e "$LAUNCHER" ] || [ -L "$LAUNCHER" ]; then
+    if [ -L "$LAUNCHER" ] || ! grep -qF "$MARKER" "$LAUNCHER"; then
+      die "$LAUNCHER already exists and was not created by this installer (perhaps npm install -g). Remove it, or set VALCLOUD_BIN_DIR to another directory, and run the installer again."
+    fi
+  fi
+}
+
+# Fails early, before any download, when the launcher's directory cannot be used.
+prepare_bin_dir() {
+  if mkdir -p "$BIN_DIR" && [ -w "$BIN_DIR" ]; then
+    return 0
+  fi
+  die "cannot write to $BIN_DIR. If an earlier run with sudo created it, take it back with: sudo chown -R \"\$(id -un)\" \"$BIN_DIR\" (or set VALCLOUD_BIN_DIR to a directory you own)."
+}
+
+write_launcher() {
+  check_launcher_ownership
+  prepare_bin_dir
+  LAUNCHER_TMP=$(mktemp "$BIN_DIR/.valcloud.tmp.XXXXXX") || die "cannot create a temporary file in $BIN_DIR."
+  # --use-env-proxy honours HTTPS_PROXY and NO_PROXY, and --use-system-ca trusts the operating system's certificates (TLS-inspecting proxies); neither changes anything when no proxy is set.
+  printf '#!/bin/sh\n%s\n' "$MARKER" >"$LAUNCHER_TMP" || die "cannot write the launcher in $BIN_DIR."
+  printf 'exec %s --use-env-proxy --use-system-ca %s "$@"\n' "$(sh_quote "$NODE")" "$(sh_quote "$APP")" >>"$LAUNCHER_TMP" ||
+    die "cannot write the launcher in $BIN_DIR."
+  chmod 755 "$LAUNCHER_TMP" || die "cannot make the launcher in $BIN_DIR executable."
+  # Nothing is replaced until the new launcher works.
+  local out
+  out=$("$LAUNCHER_TMP" --version 2>&1 || true)
+  [ "$out" = "$VALCLOUD_VERSION" ] ||
+    die "the new launcher does not run, so $LAUNCHER was not changed. Its output was:
+$(explain "$out")"
+  mv -f "$LAUNCHER_TMP" "$LAUNCHER" || die "could not replace $LAUNCHER. Check that you own $BIN_DIR, then run the installer again."
+  LAUNCHER_TMP=''
+}
+
+# Prints the runtime dir and the bundle that each recorded launcher still names, one per line.
+launcher_targets() {
+  local launcher node
+  [ -f "$INSTALL_DIR/$LAUNCHERS_FILE" ] || return 0
+  while IFS= read -r launcher; do
+    if [ -L "$launcher" ] || [ ! -f "$launcher" ] || ! grep -qF "$MARKER" "$launcher"; then continue; fi
+    node=$(sed -n "s|^exec '\([^']*\)' --use-env-proxy --use-system-ca '[^']*' \"\$@\"\$|\1|p" "$launcher")
+    printf '%s\n' "${node%/bin/node}"
+    sed -n "s|^exec '[^']*' --use-env-proxy --use-system-ca '\([^']*\)' \"\$@\"\$|\1|p" "$launcher"
+  done <"$INSTALL_DIR/$LAUNCHERS_FILE"
+  return 0
+}
+
+# Best effort: a failure here must not undo or hide an install that already works. Only the installer's own names are deleted, so a custom install dir that holds other files keeps them. The launchers are read again first, so the runtime and bundle of a run that finished meanwhile survive.
+remove_old_versions() {
+  local entry keep
+  keep=$(launcher_targets)
+  for entry in "$INSTALL_DIR"/runtime/node-v*-* "$INSTALL_DIR"/lib/valcloud-[0-9]*.mjs; do
+    [ -e "$entry" ] || continue
+    if [ "$entry" = "${NODE%/bin/node}" ] || [ "$entry" = "$APP" ]; then continue; fi
+    case "
+$keep
+" in *"
+$entry
+"*) continue ;; esac
+    rm -rf "$entry" || say "Warning: could not remove the old file $entry; it is safe to delete."
+  done
+  # Another run may still be using a fresh work dir or temp launcher, so only leftovers of killed runs go.
+  find "$INSTALL_DIR/" -maxdepth 1 -type d -name '.install.*' -mmin +60 -prune -exec rm -rf {} + 2>/dev/null || true
+  find "$BIN_DIR/" -maxdepth 1 -type f -name '.valcloud.tmp.*' -mmin +60 -exec rm -f {} + 2>/dev/null || true
+}
+
+on_path() { # dir
+  local entry old_ifs=$IFS
+  IFS=:
+  for entry in $PATH; do
+    if [ -n "$entry" ] && [ "$entry" -ef "$1" ]; then
+      IFS=$old_ifs
+      return 0
+    fi
+  done
+  IFS=$old_ifs
+  return 1
+}
+
+first_valcloud_on_path() {
+  local entry old_ifs=$IFS
+  IFS=:
+  for entry in $PATH; do
+    if [ -n "$entry" ] && [ -x "$entry/valcloud" ]; then
+      IFS=$old_ifs
+      printf '%s\n' "$entry/valcloud"
+      return 0
+    fi
+  done
+  IFS=$old_ifs
+}
+
+path_dir_expr() { # how the profile line spells BIN_DIR
+  case "$BIN_DIR" in
+    "$HOME"/*) printf '%s' "\$HOME/${BIN_DIR#"$HOME"/}" ;;
+    *) printf '%s' "$BIN_DIR" ;;
+  esac
+}
+
+# Returns 0 when the line was written, 1 when an earlier run already wrote one, 2 when the file cannot be written.
+append_line() { # file line
+  if [ -f "$1" ] && grep -qF "$PROFILE_MARKER" "$1"; then return 1; fi
+  mkdir -p "$(dirname "$1")" 2>/dev/null || return 2
+  # A file that does not exist yet gets no blank line first.
+  if [ -s "$1" ]; then { printf '\n' >>"$1"; } 2>/dev/null || return 2; fi
+  { printf '%s %s\n' "$2" "$PROFILE_MARKER" >>"$1"; } 2>/dev/null || return 2
+}
+
+# The directory zsh itself reads .zshrc from; ZDOTDIR is usually set in ~/.zshenv, which this script does not see.
+zsh_config_dir() {
+  local dir=''
+  if command -v zsh >/dev/null 2>&1; then
+    dir=$(zsh -c 'printf %s "${ZDOTDIR:-$HOME}"' 2>/dev/null || true)
+  fi
+  case "$dir" in
+    /*) printf '%s' "$dir" ;;
+    *) printf '%s' "${ZDOTDIR:-$HOME}" ;;
+  esac
+}
+
+# bash reads the first of these when it is a login shell, and macOS terminals start login shells.
+bash_login_file() {
+  local file
+  for file in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+    if [ -f "$file" ]; then
+      printf '%s' "$file"
+      return
+    fi
+  done
+  printf '%s' "$HOME/.bash_profile"
+}
+
+update_profile() { # sets PATH_NOTE
+  PATH_NOTE=''
+  on_path "$BIN_DIR" && return 0
+  local shell_name profile='' dir_expr line
+  shell_name=$(basename "${SHELL:-}")
+  dir_expr=$(path_dir_expr)
+  line="export PATH=\"$dir_expr:\$PATH\""
+  case "$shell_name" in
+    zsh) profile="$(zsh_config_dir)/.zshrc" ;;
+    bash)
+      if [ "$(uname -s)" != Darwin ] && [ -f "$HOME/.bashrc" ]; then
+        profile="$HOME/.bashrc"
+      else
+        profile=$(bash_login_file)
+      fi
+      ;;
+    fish)
+      profile="${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/valcloud.fish"
+      line="contains -- \"$BIN_DIR\" \$PATH; or set -gx PATH \"$BIN_DIR\" \$PATH"
+      ;;
+  esac
+  if [ -z "$profile" ]; then
+    PATH_NOTE="$BIN_DIR is not on your PATH. Add it in your shell's startup file: $line"
+    return 0
+  fi
+  local appended=0
+  append_line "$profile" "$line" || appended=$?
+  case "$appended" in
+    0) PATH_NOTE="Added $BIN_DIR to PATH in $profile. Open a new terminal before running valcloud." ;;
+    1)
+      if grep -qxF "$line $PROFILE_MARKER" "$profile"; then
+        PATH_NOTE="$profile already adds $BIN_DIR to PATH. Open a new terminal before running valcloud."
+      else
+        PATH_NOTE="$profile has a valcloud PATH line for another directory, so $BIN_DIR was not added. Edit that line to use $BIN_DIR."
+      fi
+      ;;
+    *) PATH_NOTE="Could not write $profile, so $BIN_DIR is not on your PATH yet. Add this line to your shell's startup file yourself: $line" ;;
+  esac
+}
+
+main() {
+  [ -n "${HOME:-}" ] || die "HOME is not set."
+  INSTALL_DIR="${VALCLOUD_INSTALL_DIR:-$HOME/.valcloud}"
+  BIN_DIR="${VALCLOUD_BIN_DIR:-$HOME/.local/bin}"
+  LAUNCHER="$BIN_DIR/valcloud"
+  case "$INSTALL_DIR$BIN_DIR" in *"
+"*) die "install paths must not contain newlines." ;; esac
+  case "$INSTALL_DIR:$BIN_DIR" in /*:/*) ;; *) die "VALCLOUD_INSTALL_DIR and VALCLOUD_BIN_DIR must be absolute paths." ;; esac
+  case "$INSTALL_DIR/:$BIN_DIR/" in
+    */./* | */../*) die "VALCLOUD_INSTALL_DIR and VALCLOUD_BIN_DIR must not contain . or .. components; spell out the full path." ;;
+  esac
+  # Node.js refuses to run a module whose path has a backslash (it reads %5C in the file URL as a path separator).
+  case "$INSTALL_DIR" in
+    *\\*) die "VALCLOUD_INSTALL_DIR must not contain a backslash; Node.js cannot run a module from such a path." ;;
+  esac
+  # BIN_DIR is written into a shell startup file inside double quotes.
+  case "$BIN_DIR" in
+    *'"'* | *'$'* | *'`'* | *\\*) die "VALCLOUD_BIN_DIR must not contain a double quote, dollar sign, backtick or backslash." ;;
+  esac
+  check_not_sudo
+
+  detect_platform
+  check_tools
+  check_launcher_ownership
+  check_install_dir
+  prepare_bin_dir
+  claim_install_dir
+  record_launcher
+  WORK=$(mktemp -d "$INSTALL_DIR/.install.XXXXXX") || die "cannot create a temporary directory in $INSTALL_DIR."
+  trap cleanup EXIT
+
+  local previous was_on_path=no
+  previous=$(previous_version)
+  if on_path "$BIN_DIR"; then was_on_path=yes; fi
+  install_runtime
+  install_app
+  write_launcher
+  update_profile
+  remove_old_versions
+
+  if [ -z "$previous" ]; then
+    say "Installed valcloud $VALCLOUD_VERSION at $LAUNCHER"
+  elif [ "$previous" = "$VALCLOUD_VERSION" ]; then
+    say "valcloud $VALCLOUD_VERSION is already installed at $LAUNCHER (runtime checked)"
+  else
+    say "Updated valcloud $previous -> $VALCLOUD_VERSION"
+  fi
+  [ -z "$PATH_NOTE" ] || say "$PATH_NOTE"
+  local first
+  first=$(first_valcloud_on_path)
+  if [ "$was_on_path" = no ] && [ -n "$first" ]; then
+    say "Note: another valcloud is installed at $first; new terminals will run $LAUNCHER instead."
+  elif [ -n "$first" ] && ! [ "$first" -ef "$LAUNCHER" ]; then
+    say "Warning: $first comes before $LAUNCHER on your PATH, so 'valcloud' runs that one. Remove it (for example: npm uninstall -g @validationcloud/cli) or reorder PATH."
+  fi
+  say "Next: valcloud auth login"
+}
+
+main "$@"

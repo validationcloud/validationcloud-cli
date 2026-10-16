@@ -85,9 +85,9 @@ jobs:
       - name: Test
         run: pnpm run test
 
-  # The installer pins Node 24.22.0 (scripts/node-runtime.json on feat/install-script), where undici retries a proxy that closes CONNECT forever; this job runs the integration tests on it. Update the version when that pin moves.
-  node-pinned:
-    name: Node 24.22.0 integration tests
+  # The installer ships valcloud.mjs on the Node.js version pinned in scripts/node-runtime.json, so the CLI suite also runs against that bundle on that runtime. That version retries a proxy that closes CONNECT forever (nodejs/undici#3897), which the proxy tests cover.
+  bundle:
+    name: Bundle tests on the pinned Node.js
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -102,13 +102,56 @@ jobs:
         # Same as in the checks job: pull_request checks out attacker-controlled code.
         run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
 
+      - name: Read the pinned Node.js version
+        id: pinned
+        run: echo "version=$(jq -r .version scripts/node-runtime.json)" >> "$GITHUB_OUTPUT"
+
       - name: Set up the toolchain
         uses: ./.github/actions/install-workspace
         with:
-          node-version: 24.22.0
+          node-version: ${{ steps.pinned.outputs.version }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Integration tests
-        run: pnpm exec vitest run test/cli.integration.test.ts
+      - name: Test the bundle
+        run: pnpm run test:bundle
+
+  # Installs with the rendered install.sh from local files, with no Node.js on PATH, on Linux x64 and arm64, macOS on Apple silicon (also from an x86_64 shell under Rosetta when the runner has it) and macOS on Intel.
+  installer:
+    name: Installer on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel]
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Strip untrusted project install config
+        # Same as in the checks job: pull_request checks out attacker-controlled code.
+        run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
+
+      - name: Set up the toolchain
+        uses: ./.github/actions/install-workspace
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Lint the installer
+        if: runner.os == 'Linux'
+        run: pnpm run lint:shell
+
+      # The installer runs under /bin/bash, which is Bash 3.2 on macOS.
+      - name: Test the installer
+        run: pnpm run test:installer
+
+      - name: Test the installer in containers
+        if: runner.os == 'Linux'
+        run: pnpm run test:installer:docker

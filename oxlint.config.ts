@@ -137,6 +137,28 @@ const config = {
       },
     },
     {
+      files: ["scripts/**/*.ts"],
+      rules: {
+        // These are short-lived operational scripts: their output is the interface, and blocking on a child process is fine.
+        "no-console": "off",
+        "node/no-sync": "off",
+      },
+    },
+    {
+      files: ["release.config.js"],
+      rules: {
+        // The exec plugin expands ${nextRelease.version} itself, in plain strings.
+        "no-template-curly-in-string": "off",
+      },
+    },
+    {
+      files: ["types/semantic-release-plugins.d.ts"],
+      rules: {
+        // An import or export would turn the ambient module declaration into an augmentation of a module that has no types.
+        "import/unambiguous": "off",
+      },
+    },
+    {
       files: ["src/auth/capture-sdk-console.ts", "src/auth/capture-sdk-console.test.ts"],
       rules: {
         // Capturing the SDK's console output is the purpose of these files.

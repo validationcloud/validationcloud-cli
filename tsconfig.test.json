@@ -6,7 +6,8 @@
     "types": ["vitest/globals", "node"],
     "jsx": "react-jsx",
     "composite": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowJs": true
   },
   "files": ["package.json"],
   "include": [
@@ -17,6 +18,8 @@
     "src/**/*.tsx",
     "test/**/*.ts",
     "scripts/**/*.ts",
+    "scripts/*.json",
+    "release.config.js",
     "vitest.config.ts",
     "vitest.config.mts",
     "vite.config.ts",

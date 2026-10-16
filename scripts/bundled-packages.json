@@ -1,0 +1,16 @@
+{
+  "note": "Bundled files that ship no sourcemap, so scripts/third-party-notices.ts cannot see code inlined in them. Each was checked by hand. `packages`: the package ships no sourcemaps at all and has no dependencies of its own to inline (env-paths depends on is-safe-filename, which is bundled and listed separately). `files`: a map-less file inside a package whose other files have sourcemaps; written as package/path-inside-the-package. Anything not listed here fails the release build.",
+  "packages": [
+    "@commander-js/extra-typings",
+    "commander",
+    "env-paths",
+    "is-safe-filename",
+    "jose",
+    "pkce-challenge",
+    "zod"
+  ],
+  "files": [
+    "@modelcontextprotocol/client/dist/chunk-Br0eD_fh.mjs",
+    "@modelcontextprotocol/core/dist/internal.mjs"
+  ]
+}
