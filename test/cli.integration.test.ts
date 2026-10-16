@@ -1,14 +1,20 @@
 import { spawn } from "node:child_process";
 import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
+import type { AddressInfo, Server, Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createCredentialStore } from "#auth/credential-store";
+import { startMockAuthorizationServer } from "./auth-mock-authorization-server.ts";
 import { startStubMcpServer } from "./stub-mcp-server.ts";
 import type { RecordedRequest, StubMcpServer } from "./stub-mcp-server.ts";
 
 const root = join(import.meta.dirname, "..");
+
+// Payload {"exp":9999999999}: valid locally, yet the gateway may still answer 401.
+const UNEXPIRED_ACCESS_TOKEN = "h.eyJleHAiOjk5OTk5OTk5OTl9.s";
 
 type CliRun = { exitCode: number; stdout: string; stderr: string };
 type CliOptions = {
@@ -16,6 +22,13 @@ type CliOptions = {
   home?: string;
   stdin?: string;
   keepStdinOpen?: boolean;
+  nodeArgs?: string[];
+  // Kills a CLI that hangs, so the failure is an assertion and not a vitest timeout with an orphan.
+  killAfterMs?: number;
+  // Leaves stdout unread for this long, like a slow consumer at the end of a pipe.
+  stdoutReadDelayMs?: number;
+  // Closes the read end of stdout right after the start, like `| true`.
+  closeStdoutAtOnce?: boolean;
 };
 type PtyRun = { exitCode: number; timedOut: boolean; stdout: string; terminal: string };
 
@@ -31,14 +44,32 @@ function collect(
     env: Record<string, string | undefined>;
     stdin?: string;
     keepStdinOpen?: boolean;
+    killAfterMs?: number;
+    stdoutReadDelayMs?: number;
+    closeStdoutAtOnce?: boolean;
   },
 ): Promise<CliRun> {
   return new Promise((resolve, reject) => {
-    const { stdin, keepStdinOpen, ...spawnOptions } = options;
+    const {
+      stdin,
+      keepStdinOpen,
+      killAfterMs,
+      stdoutReadDelayMs,
+      closeStdoutAtOnce,
+      ...spawnOptions
+    } = options;
     const child = spawn(command, args, {
       stdio: ["pipe", "pipe", "pipe"],
+      timeout: killAfterMs,
       ...spawnOptions,
     });
+    if (closeStdoutAtOnce === true) child.stdout.destroy();
+    if (stdoutReadDelayMs !== undefined) {
+      child.stdout.pause();
+      setTimeout(() => {
+        child.stdout.resume();
+      }, stdoutReadDelayMs);
+    }
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -61,6 +92,12 @@ async function freshHome(): Promise<string> {
   return created;
 }
 
+function credentialsDirectory(home: string): string {
+  return process.platform === "darwin"
+    ? join(home, "Library", "Preferences", "valcloud")
+    : join(home, "config", "valcloud");
+}
+
 function cliEnvironment(home: string, env: Record<string, string | undefined> = {}) {
   return {
     PATH: process.env.PATH,
@@ -74,11 +111,18 @@ function cliEnvironment(home: string, env: Record<string, string | undefined> = 
 }
 
 function runCli(args: string[], options: CliOptions = {}): Promise<CliRun> {
-  return collect(process.execPath, [join(root, "bin", "valcloud"), ...args], {
-    env: cliEnvironment(options.home ?? sharedHome, options.env),
-    stdin: options.stdin,
-    keepStdinOpen: options.keepStdinOpen,
-  });
+  return collect(
+    process.execPath,
+    [...(options.nodeArgs ?? []), join(root, "bin", "valcloud"), ...args],
+    {
+      env: cliEnvironment(options.home ?? sharedHome, options.env),
+      stdin: options.stdin,
+      keepStdinOpen: options.keepStdinOpen,
+      killAfterMs: options.killAfterMs,
+      stdoutReadDelayMs: options.stdoutReadDelayMs,
+      closeStdoutAtOnce: options.closeStdoutAtOnce,
+    },
+  );
 }
 
 async function runCliInPty(
@@ -135,6 +179,27 @@ async function closedLocalPort(): Promise<number> {
     });
   });
   return port;
+}
+
+async function startFakeProxy(
+  onConnect: (socket: Socket) => void,
+  sockets: Set<Socket>,
+): Promise<Server> {
+  const proxy = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("error", () => undefined);
+    socket.once("data", () => {
+      onConnect(socket);
+    });
+  });
+  await new Promise<void>((resolve) => {
+    proxy.listen(0, "127.0.0.1", resolve);
+  });
+  return proxy;
+}
+
+function proxyUrl(proxy: Server): string {
+  return `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
 }
 
 beforeAll(async () => {
@@ -532,6 +597,201 @@ describe("failure reporting", () => {
   });
 });
 
+// Node 22.12 predates --use-env-proxy, and without it the CLI would try to reach the host directly.
+describe.skipIf(!process.allowedNodeEnvironmentFlags.has("--use-env-proxy"))(
+  "a broken HTTP proxy",
+  () => {
+    const unreachableGateway = "https://mcp.example.test/mcp";
+    const timeoutMs = 1500;
+    const proxies: Server[] = [];
+    const proxySockets = new Set<Socket>();
+
+    async function brokenProxy(onConnect: (socket: Socket) => void): Promise<string> {
+      const proxy = await startFakeProxy(onConnect, proxySockets);
+      proxies.push(proxy);
+      return proxyUrl(proxy);
+    }
+
+    afterAll(async () => {
+      await Promise.all(
+        proxies.map(
+          (proxy) =>
+            new Promise<void>((resolve) => {
+              proxy.close(() => {
+                resolve();
+              });
+              for (const socket of proxySockets) socket.destroy();
+            }),
+        ),
+      );
+    });
+
+    async function runBehindProxy(args: string[], proxy: string, env: Record<string, string> = {}) {
+      return runCli(args, {
+        home: await freshHome(),
+        nodeArgs: ["--use-env-proxy"],
+        killAfterMs: 20_000,
+        env: {
+          VC_MCP_URL: unreachableGateway,
+          HTTPS_PROXY: proxy,
+          VC_REQUEST_TIMEOUT_MS: String(timeoutMs),
+          ...env,
+        },
+      });
+    }
+
+    it("exits 1 and blames the proxy when it closes the connection during CONNECT", async () => {
+      const proxy = await brokenProxy((socket) => {
+        socket.end();
+      });
+
+      const run = await runBehindProxy(["tools"], proxy);
+
+      expect(run.exitCode).toBe(1);
+      // Node 24's undici reconnects forever, so the timeout ends the run; newer Node fails at once.
+      expect(run.stderr).toMatch(
+        /^valcloud: (?:no response from https:\/\/mcp\.example\.test\/mcp within 1500 ms|cannot reach https:\/\/mcp\.example\.test\/mcp \(UND_ERR_SOCKET\))\n/u,
+      );
+      expect(run.stderr).toContain(
+        `hint: the proxy set in HTTPS_PROXY (${proxy}) is the likely cause`,
+      );
+    });
+
+    it("exits 1 and blames the proxy when it accepts the connection and never answers", async () => {
+      const proxy = await brokenProxy(() => undefined);
+
+      const run = await runBehindProxy(["tools"], proxy);
+
+      expect(run.exitCode).toBe(1);
+      expect(run.stderr).toContain(
+        "valcloud: no response from https://mcp.example.test/mcp within 1500 ms\n",
+      );
+      expect(run.stderr).toContain(`the proxy set in HTTPS_PROXY (${proxy}) is the likely cause`);
+    });
+
+    it("bounds a tool call that runs with a cached catalog, through the proxy", async () => {
+      const home = await freshHome();
+      const warmUp = await runCli(["tools"], { home });
+      expect(warmUp.exitCode).toBe(0);
+      const proxy = await brokenProxy(() => undefined);
+
+      const run = await runCli(["demo", "get-item", "a1"], {
+        home,
+        nodeArgs: ["--use-env-proxy"],
+        killAfterMs: 20_000,
+        env: { HTTP_PROXY: proxy, VC_REQUEST_TIMEOUT_MS: String(timeoutMs) },
+      });
+
+      expect(run.exitCode).toBe(1);
+      expect(run.stderr).toContain(`no response from ${server.url} within 1500 ms`);
+      expect(run.stderr).toContain(`the proxy set in HTTP_PROXY (${proxy}) is the likely cause`);
+    });
+  },
+);
+
+describe("the request timeout setting", () => {
+  it("exits 2 when VC_REQUEST_TIMEOUT_MS is not a whole number of milliseconds", async () => {
+    const run = await runCli(["tools"], { env: { VC_REQUEST_TIMEOUT_MS: "soon" } });
+
+    expect(run).toStrictEqual({
+      exitCode: 2,
+      stdout: "",
+      stderr:
+        "valcloud: VC_REQUEST_TIMEOUT_MS must be a whole number of milliseconds between 1 and 2147483647\n",
+    });
+  });
+});
+
+describe("a failing run whose stdout reader is gone", () => {
+  it("still exits with the failure code", async () => {
+    const url = `http://127.0.0.1:${await closedLocalPort()}/mcp`;
+
+    const run = await runCli(["tools"], {
+      env: { VC_MCP_URL: url },
+      home: await freshHome(),
+      closeStdoutAtOnce: true,
+      killAfterMs: 20_000,
+    });
+
+    expect(run.exitCode).toBe(1);
+    expect(run.stderr).toContain(`cannot reach ${url}`);
+  });
+});
+
+describe("a token refresh that outlives the request timeout", () => {
+  // The gateway holds its 401 for 6 s, so the refresh starts 6 s into the 7.5 s limit and its own 7.5 s bound ends 6 s after the limit.
+  // Releasing the refresh 3 s after the limit leaves 3 s of slack on both sides, whatever the machine's speed.
+  const requestTimeoutMs = 7500;
+  const gatewayHoldMs = 6000;
+  const refreshReleaseAfterArrivalMs = 4500;
+
+  it("is finished before the process exits, so the rotated token is stored and the lock is gone", async () => {
+    const mock = await startMockAuthorizationServer({
+      refreshDelayMs: 0,
+      reuseDelayMs: 0,
+      gatedGateway: true,
+      gatedRefresh: true,
+    });
+    try {
+      const home = await freshHome();
+      const directory = credentialsDirectory(home);
+      const store = createCredentialStore(join(directory, "credentials.json"));
+      mock.acceptRefreshToken("rt-seed");
+      await store.update(mock.mcpUrl, () => ({
+        client: { client_id: "cli-client", issuer: mock.issuer },
+        tokens: {
+          access_token: UNEXPIRED_ACCESS_TOKEN,
+          token_type: "Bearer",
+          refresh_token: "rt-seed",
+          issuer: mock.issuer,
+        },
+        tokensSavedAtMs: Date.now(),
+      }));
+
+      const running = runCli(["tools"], {
+        home,
+        env: {
+          VC_TOKEN: undefined,
+          VC_MCP_URL: mock.mcpUrl,
+          VC_REQUEST_TIMEOUT_MS: String(requestTimeoutMs),
+        },
+        killAfterMs: 30_000,
+      });
+      await mock.gateway.arrived;
+      await sleep(gatewayHoldMs);
+      mock.gateway.release();
+      await mock.refresh.arrived;
+      await sleep(refreshReleaseAfterArrivalMs);
+      mock.refresh.release();
+      const run = await running;
+
+      expect(run.exitCode).toBe(1);
+      expect(run.stderr).toContain(`no response from ${mock.mcpUrl} within 7500 ms`);
+      const entry = await store.read(mock.mcpUrl);
+      expect(entry?.tokens?.refresh_token).toBe("rt-1");
+      await expect(readdir(directory)).resolves.toStrictEqual(["credentials.json"]);
+    } finally {
+      await mock.close();
+    }
+  });
+});
+
+describe("a long result written to a slow pipe", () => {
+  it("is delivered in full before the explicit exit", async () => {
+    const id = "x".repeat(3_000_000);
+
+    const run = await runCli(["demo", "get-item", "--input", "-", "--json"], {
+      stdin: JSON.stringify({ id }),
+      stdoutReadDelayMs: 500,
+      killAfterMs: 20_000,
+    });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toHaveLength(3_000_054);
+    expect(run.stdout.endsWith('"notes":"line one\\nline two"}\n')).toBe(true);
+  });
+});
+
 describe("valcloud --help", () => {
   it("lists generic examples instead of tool names", async () => {
     const run = await runCli(["--help"]);
@@ -584,10 +844,7 @@ describe("a corrupt credentials.json", () => {
 
   async function homeWithCorruptCredentials(): Promise<{ home: string; file: string }> {
     const home = await freshHome();
-    const directory =
-      process.platform === "darwin"
-        ? join(home, "Library", "Preferences", "valcloud")
-        : join(home, "config", "valcloud");
+    const directory = credentialsDirectory(home);
     await mkdir(directory, { recursive: true });
     const file = join(directory, "credentials.json");
     await writeFile(

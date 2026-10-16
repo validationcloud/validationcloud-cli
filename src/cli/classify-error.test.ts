@@ -1,4 +1,4 @@
-import { OAuthError, ProtocolError } from "@modelcontextprotocol/client";
+import { OAuthError, ProtocolError, SdkError, SdkErrorCode } from "@modelcontextprotocol/client";
 import { describe, expect, it } from "vitest";
 import { AuthRequiredError } from "#auth/auth-required-error";
 import { CredentialsFileError } from "#auth/credentials-file-error";
@@ -29,6 +29,30 @@ describe("classifyError", () => {
       kind: "protocol",
       rpcCode: -32_602,
       message: "Tool x not found",
+    });
+  });
+
+  it("reads the limit out of an SDK request timeout", () => {
+    const timeout = new SdkError(SdkErrorCode.RequestTimeout, "Request timed out", {
+      timeout: 1500,
+    });
+
+    expect(classifyError(timeout)).toStrictEqual({ kind: "timeout", timeoutMs: 1500 });
+  });
+
+  it("treats a timeout without data as a timeout of unknown length", () => {
+    expect(
+      classifyError(new SdkError(SdkErrorCode.RequestTimeout, "Request timed out")),
+    ).toStrictEqual({ kind: "timeout", timeoutMs: undefined });
+  });
+
+  it("treats the TimeoutError of an aborted fetch as a timeout of unknown length", () => {
+    const aborted = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+
+    expect(classifyError(aborted)).toStrictEqual({ kind: "timeout", timeoutMs: undefined });
+    expect(classifyError(new TypeError("fetch failed", { cause: aborted }))).toStrictEqual({
+      kind: "timeout",
+      timeoutMs: undefined,
     });
   });
 

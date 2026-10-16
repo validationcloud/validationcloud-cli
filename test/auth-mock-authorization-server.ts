@@ -2,6 +2,13 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
+import {
+  authorizationServerMetadata,
+  protectedResourceMetadata,
+} from "./mock-authorization-metadata.ts";
+import { readBody, sendJson } from "./http-json.ts";
+import { createGate } from "./create-gate.ts";
+import type { Gate } from "./create-gate.ts";
 
 type TokenRequest = { grantType: string | null; refreshToken: string | null };
 
@@ -10,6 +17,10 @@ export type MockAuthorizationServerOptions = {
   refreshDelayMs: number;
   // Answering a reused token late lets the winner save its rotated tokens first.
   reuseDelayMs: number;
+  // When set, the gateway endpoint /mcp answers 401 with a pointer to this server once the test releases `gateway`; otherwise it is a 404.
+  gatedGateway?: boolean;
+  // When set, a valid refresh is answered only once the test releases `refresh`, in addition to refreshDelayMs.
+  gatedRefresh?: boolean;
 };
 
 export type MockAuthorizationServer = {
@@ -17,6 +28,8 @@ export type MockAuthorizationServer = {
   issuer: string;
   tokenRequests: TokenRequest[];
   registrations: number[];
+  gateway: Gate;
+  refresh: Gate;
   acceptRefreshToken: (token: string) => void;
   failTokenRequests: (status: 500 | undefined) => void;
   close: () => Promise<void>;
@@ -24,16 +37,6 @@ export type MockAuthorizationServer = {
 
 function base64url(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
-}
-
-async function readBody(request: IncomingMessage): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(chunk as Buffer);
-  return Buffer.concat(chunks).toString();
-}
-
-function sendJson(response: ServerResponse, status: number, body: unknown): void {
-  response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
 }
 
 export async function startMockAuthorizationServer(
@@ -45,6 +48,8 @@ export async function startMockAuthorizationServer(
   let issued = 0;
   let failureStatus: 500 | undefined;
   let base = "";
+  const gateway = createGate();
+  const refresh = createGate();
 
   async function token(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const params = new URLSearchParams(await readBody(request));
@@ -66,6 +71,7 @@ export async function startMockAuthorizationServer(
       return;
     }
     await sleep(options.refreshDelayMs);
+    if (options.gatedRefresh === true) await refresh.hold();
     issued += 1;
     const rotated = `rt-${issued}`;
     validRefreshTokens.add(rotated);
@@ -77,31 +83,30 @@ export async function startMockAuthorizationServer(
     });
   }
 
+  async function rejectGatewayRequest(
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
+    await readBody(request);
+    await gateway.hold();
+    response
+      .writeHead(401, {
+        "www-authenticate": `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource/mcp"`,
+      })
+      .end();
+  }
+
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", base);
     if (url.pathname.startsWith("/.well-known/oauth-protected-resource")) {
-      sendJson(response, 200, {
-        resource: `${base}/mcp`,
-        authorization_servers: [base],
-        scopes_supported: ["openid", "profile", "email"],
-      });
+      sendJson(response, 200, protectedResourceMetadata(base));
       return;
     }
     if (
       url.pathname.startsWith("/.well-known/oauth-authorization-server") ||
       url.pathname.startsWith("/.well-known/openid-configuration")
     ) {
-      sendJson(response, 200, {
-        issuer: base,
-        authorization_endpoint: `${base}/authorize`,
-        token_endpoint: `${base}/token`,
-        registration_endpoint: `${base}/register`,
-        response_types_supported: ["code"],
-        code_challenge_methods_supported: ["S256"],
-        grant_types_supported: ["authorization_code", "refresh_token"],
-        scopes_supported: ["openid", "profile", "email", "offline_access"],
-        token_endpoint_auth_methods_supported: ["none"],
-      });
+      sendJson(response, 200, authorizationServerMetadata(base));
       return;
     }
     if (url.pathname === "/register") {
@@ -111,6 +116,10 @@ export async function startMockAuthorizationServer(
     }
     if (url.pathname === "/token") {
       void token(request, response);
+      return;
+    }
+    if (url.pathname === "/mcp" && options.gatedGateway === true) {
+      void rejectGatewayRequest(request, response);
       return;
     }
     response.writeHead(404).end();
@@ -126,6 +135,8 @@ export async function startMockAuthorizationServer(
     issuer: base,
     tokenRequests,
     registrations,
+    gateway,
+    refresh,
     acceptRefreshToken(refreshToken) {
       validRefreshTokens.add(refreshToken);
     },
@@ -133,6 +144,8 @@ export async function startMockAuthorizationServer(
       failureStatus = status;
     },
     async close() {
+      gateway.release();
+      refresh.release();
       server.closeAllConnections();
       await new Promise<void>((resolve) => {
         server.close(() => {

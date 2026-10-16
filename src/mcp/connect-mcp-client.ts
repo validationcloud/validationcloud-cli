@@ -33,11 +33,12 @@ export async function connectMcpClient(
   url: string,
   auth: McpAuth,
   prior: DiscoverResult | undefined,
+  requestTimeoutMs: number,
 ): Promise<McpConnection> {
   const connection = createMcpConnection(url, auth);
-  await connection.client.connect(
-    connection.transport,
-    prior === undefined ? undefined : { prior: { kind: "modern", discover: prior } },
-  );
+  await connection.client.connect(connection.transport, {
+    timeout: requestTimeoutMs,
+    ...(prior === undefined ? {} : { prior: { kind: "modern", discover: prior } }),
+  });
   return connection;
 }

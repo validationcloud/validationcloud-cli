@@ -6,6 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import * as z from "zod";
 import { isLockStale } from "#core/decide-lock-staleness";
 import type { LockOwnerState } from "#core/decide-lock-staleness";
+import { trackLockSection } from "./settle-credentials-locks.ts";
 
 const STALE_AFTER_MS = 30_000;
 const RECOVERY_STALE_AFTER_MS = 5000;
@@ -145,17 +146,24 @@ async function acquireLock(lockPath: string): Promise<() => Promise<void>> {
   };
 }
 
-export async function withCredentialsLock<T>(
-  credentialsPath: string,
+async function runLocked<T>(
+  lockPath: string,
+  held: ReadonlySet<string> | undefined,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const lockPath = `${credentialsPath}.lock`;
-  const held = heldLocks.getStore();
-  if (held?.has(lockPath) === true) return fn();
   const release = await acquireLock(lockPath);
   try {
     return await heldLocks.run(new Set([...(held ?? []), lockPath]), fn);
   } finally {
     await release();
   }
+}
+
+export function withCredentialsLock<T>(credentialsPath: string, fn: () => Promise<T>): Promise<T> {
+  const lockPath = `${credentialsPath}.lock`;
+  const held = heldLocks.getStore();
+  if (held?.has(lockPath) === true) return fn();
+  const section = runLocked(lockPath, held, fn);
+  trackLockSection(section);
+  return section;
 }

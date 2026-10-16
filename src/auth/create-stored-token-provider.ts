@@ -7,6 +7,7 @@ import type { ResolvedGateway } from "#core/resolve-gateway";
 export function createStoredTokenProvider(
   gateway: ResolvedGateway,
   store: CredentialStore,
+  refreshTimeoutMs: number,
 ): AuthProvider {
   let lastToken: string | undefined;
   return {
@@ -18,7 +19,7 @@ export function createStoredTokenProvider(
     async onUnauthorized() {
       await refreshStoredCredentials(gateway, store, {
         rejectedAccessToken: lastToken,
-        requestTimeoutMs: undefined,
+        requestTimeoutMs: refreshTimeoutMs,
       });
     },
   };

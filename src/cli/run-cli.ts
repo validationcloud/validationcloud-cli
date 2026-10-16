@@ -1,15 +1,19 @@
 import { CommanderError } from "@commander-js/extra-typings";
 import { withSdkConsoleCaptured } from "#auth/capture-sdk-console";
 import { createCredentialStore } from "#auth/credential-store";
+import { settleCredentialsLocks } from "#auth/settle-credentials-locks";
 import { resolveCredentials } from "#auth/resolve-credentials";
 import type { Credentials } from "#auth/resolve-credentials";
 import { loginHint } from "#core/auth-hint";
 import { CliFailureError, createFailure, formatFailure } from "#core/cli-failure";
 import type { CliFailure } from "#core/cli-failure";
+import { describeEnvProxy } from "#core/describe-env-proxy";
 import { exitCodeFor } from "#core/exit-codes";
 import { SilentExitError } from "#core/silent-exit-error";
 import { resolveGateway } from "#core/resolve-gateway";
 import type { ResolvedGateway } from "#core/resolve-gateway";
+import { resolveRequestTimeouts } from "#core/resolve-request-timeouts";
+import type { RequestTimeouts } from "#core/resolve-request-timeouts";
 import { scanGlobalArgs } from "#core/scan-global-args";
 import type { GlobalArgsScan } from "#core/scan-global-args";
 import { createCatalogStore } from "#mcp/catalog-store";
@@ -25,11 +29,17 @@ import { toFailure } from "./to-failure.ts";
 
 export type CliIo = {
   processEnv: NodeJS.ProcessEnv;
+  execArgv: readonly string[];
   stdout: (text: string) => void;
   stderr: (text: string) => void;
 };
 
-function createContext(gateway: ResolvedGateway, io: CliIo, wantsJson: boolean): CliContext {
+function createContext(
+  gateway: ResolvedGateway,
+  requestTimeouts: RequestTimeouts,
+  io: CliIo,
+  wantsJson: boolean,
+): CliContext {
   const credentialStore = createCredentialStore(credentialsFilePath);
   const usesStaticToken = (io.processEnv.VC_TOKEN ?? "") !== "";
   let pendingCredentials: Promise<Credentials> | undefined;
@@ -40,6 +50,7 @@ function createContext(gateway: ResolvedGateway, io: CliIo, wantsJson: boolean):
     catalogStore: createCatalogStore(cacheDirectory),
     usesStaticToken,
     wantsJson,
+    requestTimeouts,
     credentials: () => {
       pendingCredentials ??= resolveCredentials(gateway, io.processEnv.VC_TOKEN, credentialStore);
       return pendingCredentials;
@@ -47,6 +58,7 @@ function createContext(gateway: ResolvedGateway, io: CliIo, wantsJson: boolean):
     failureContext: {
       usesStaticToken,
       gatewayUrl: gateway.url,
+      proxy: describeEnvProxy({ env: io.processEnv, execArgv: io.execArgv }, gateway.url),
     },
     stdout: io.stdout,
     stderr: io.stderr,
@@ -112,12 +124,22 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     io.stderr(formatFailure(createFailure("usage", resolved.error), scan.wantsJson));
     return exitCodeFor("usage");
   }
-  const context = createContext(resolved.value, io, scan.wantsJson);
+  const requestTimeouts = resolveRequestTimeouts(io.processEnv.VC_REQUEST_TIMEOUT_MS);
+  if (!requestTimeouts.ok) {
+    io.stderr(formatFailure(createFailure("usage", requestTimeouts.error), scan.wantsJson));
+    return exitCodeFor("usage");
+  }
+  const context = createContext(resolved.value, requestTimeouts.value, io, scan.wantsJson);
 
   const captured = await withSdkConsoleCaptured(async () => {
     const availability = await prepareCatalog(scan, context);
     const program = buildProgram(context, availability);
-    await program.parseAsync([...argv], { from: "user" });
+    try {
+      await program.parseAsync([...argv], { from: "user" });
+    } finally {
+      // A refresh still running after a timeout may log through the SDK console, which stays captured until it ends.
+      await settleCredentialsLocks();
+    }
   });
   if (captured.suppressedCount > 0 && !scan.wantsJson) {
     io.stderr(

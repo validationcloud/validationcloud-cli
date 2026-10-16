@@ -2,6 +2,7 @@ import {
   OAuthError,
   ProtocolError,
   SdkError,
+  SdkErrorCode,
   SdkHttpError,
   UnauthorizedError,
 } from "@modelcontextprotocol/client";
@@ -29,6 +30,12 @@ function toLink(error: Error): ErrorLink {
   };
 }
 
+function timeoutOf(error: SdkError): number | undefined {
+  const { data } = error;
+  if (typeof data !== "object" || data === null || !("timeout" in data)) return undefined;
+  return typeof data.timeout === "number" ? data.timeout : undefined;
+}
+
 export function classifyError(error: unknown): ErrorFacts {
   if (error instanceof AuthRequiredError) return { kind: "login-required" };
   if (error instanceof UnauthorizedError) return { kind: "http-unauthorized" };
@@ -47,6 +54,13 @@ export function classifyError(error: unknown): ErrorFacts {
     return error.status === 401
       ? { kind: "http-unauthorized" }
       : { kind: "http-status", status: error.status, message: error.message };
+  }
+  if (error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout) {
+    return { kind: "timeout", timeoutMs: timeoutOf(error) };
+  }
+  // AbortSignal.timeout rejects a fetch with a DOMException named TimeoutError, possibly under a "fetch failed" wrapper.
+  if (causeChain(error).some((link) => link.name === "TimeoutError")) {
+    return { kind: "timeout", timeoutMs: undefined };
   }
   if (error instanceof Error) {
     return {

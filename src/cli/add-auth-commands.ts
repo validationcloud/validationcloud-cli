@@ -20,7 +20,13 @@ async function login(context: CliContext, launchBrowser: boolean): Promise<void>
       "valcloud: note: VC_TOKEN is set and takes precedence over stored credentials\n",
     );
   }
-  await runLogin({ gateway, store: credentialStore, launchBrowser, tell: context.stderr });
+  await runLogin({
+    gateway,
+    store: credentialStore,
+    launchBrowser,
+    requestTimeoutMs: context.requestTimeouts.setupMs,
+    tell: context.stderr,
+  });
 
   const credentials = await resolveCredentials(gateway, undefined, credentialStore);
   await loadCatalog(

@@ -3,6 +3,7 @@ import type { AuthHintContext } from "./auth-hint.ts";
 import { createFailure } from "./cli-failure.ts";
 import type { CliFailure } from "./cli-failure.ts";
 import { FailureKind } from "./exit-codes.ts";
+import type { EnvProxy } from "./describe-env-proxy.ts";
 
 export type ErrorFacts =
   | { kind: "login-required" }
@@ -11,13 +12,17 @@ export type ErrorFacts =
   | { kind: "oauth"; code: string }
   | { kind: "refresh-unavailable"; detail: string }
   | { kind: "network"; detail: string }
+  | { kind: "timeout"; timeoutMs: number | undefined }
   | { kind: "protocol"; rpcCode: number; message: string }
   | { kind: "other"; message: string }
   | { kind: "unclassified"; chain: readonly ErrorLink[]; isSdkError: boolean };
 
 export type ErrorLink = { message: string; code: string | undefined; isFetchFailure: boolean };
 
-export type ErrorMappingContext = AuthHintContext & { gatewayUrl: string };
+export type ErrorMappingContext = AuthHintContext & {
+  gatewayUrl: string;
+  proxy: EnvProxy | undefined;
+};
 
 const NETWORK_ERROR_CODES: ReadonlySet<string> = new Set([
   "ECONNREFUSED",
@@ -55,11 +60,34 @@ function networkDetail(chain: readonly ErrorLink[]): string | undefined {
   return innermost.code ?? (innermost.message === "" ? "network error" : innermost.message);
 }
 
+function proxyHint(proxy: EnvProxy): string {
+  const where = proxy.origin === undefined ? proxy.variable : `${proxy.variable} (${proxy.origin})`;
+  return `the proxy set in ${where} is the likely cause: check that it can reach the gateway, or unset it`;
+}
+
 function networkFailure(detail: string, context: ErrorMappingContext): CliFailure {
   return createFailure(
     FailureKind.runtime,
     `cannot reach ${context.gatewayUrl} (${detail})`,
-    "check your network, or set VC_MCP_URL to another gateway",
+    context.proxy === undefined
+      ? "check your network, or set VC_MCP_URL to another gateway"
+      : proxyHint(context.proxy),
+  );
+}
+
+function describeDuration(milliseconds: number): string {
+  return milliseconds % 1000 === 0 ? `${milliseconds / 1000} s` : `${milliseconds} ms`;
+}
+
+function timeoutFailure(timeoutMs: number | undefined, context: ErrorMappingContext): CliFailure {
+  const within = timeoutMs === undefined ? "in time" : `within ${describeDuration(timeoutMs)}`;
+  const slow = "if the call is slow rather than stuck, raise VC_REQUEST_TIMEOUT_MS";
+  return createFailure(
+    FailureKind.runtime,
+    `no response from ${context.gatewayUrl} ${within}`,
+    context.proxy === undefined
+      ? `check your network; ${slow}`
+      : `${proxyHint(context.proxy)}; ${slow}`,
   );
 }
 
@@ -79,11 +107,11 @@ function unclassifiedFailure(
   );
 }
 
-function refreshUnavailableFailure(detail: string): CliFailure {
+function refreshUnavailableFailure(detail: string, context: ErrorMappingContext): CliFailure {
   return createFailure(
     FailureKind.runtime,
     `could not refresh the session (${detail}); stored credentials are intact`,
-    "try again in a moment",
+    context.proxy === undefined ? "try again in a moment" : proxyHint(context.proxy),
   );
 }
 
@@ -111,7 +139,7 @@ export function mapErrorFacts(facts: ErrorFacts, context: ErrorMappingContext): 
     }
     case "oauth": {
       if (!REJECTED_OAUTH_CODES.has(facts.code)) {
-        return refreshUnavailableFailure(`OAuth error ${facts.code}`);
+        return refreshUnavailableFailure(`OAuth error ${facts.code}`, context);
       }
       return authFailure(context, `the authorization server rejected the session: ${facts.code}`);
     }
@@ -122,10 +150,13 @@ export function mapErrorFacts(facts: ErrorFacts, context: ErrorMappingContext): 
       );
     }
     case "refresh-unavailable": {
-      return refreshUnavailableFailure(facts.detail);
+      return refreshUnavailableFailure(facts.detail, context);
     }
     case "network": {
       return networkFailure(facts.detail, context);
+    }
+    case "timeout": {
+      return timeoutFailure(facts.timeoutMs, context);
     }
     case "protocol": {
       return protocolFailure(facts.rpcCode, facts.message);

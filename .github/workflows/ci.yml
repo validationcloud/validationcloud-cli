@@ -84,3 +84,31 @@ jobs:
 
       - name: Test
         run: pnpm run test
+
+  # The installer pins Node 24.22.0 (scripts/node-runtime.json on feat/install-script), where undici retries a proxy that closes CONNECT forever; this job runs the integration tests on it. Update the version when that pin moves.
+  node-pinned:
+    name: Node 24.22.0 integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Strip untrusted project install config
+        # Same as in the checks job: pull_request checks out attacker-controlled code.
+        run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
+
+      - name: Set up the toolchain
+        uses: ./.github/actions/install-workspace
+        with:
+          node-version: 24.22.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Integration tests
+        run: pnpm exec vitest run test/cli.integration.test.ts

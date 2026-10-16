@@ -25,12 +25,12 @@ async function run(mode: string, credentialsPath: string, argument: string): Pro
   if (mode === "refresh-locked") {
     await refreshStoredCredentials(gateway, store, {
       rejectedAccessToken: undefined,
-      requestTimeoutMs: undefined,
+      requestTimeoutMs: 20_000,
     });
     return;
   }
   if (mode === "unauthorized-locked") {
-    const provider = createStoredTokenProvider(gateway, store);
+    const provider = createStoredTokenProvider(gateway, store, 20_000);
     await provider.token();
     await provider.onUnauthorized?.({
       response: new Response(null, { status: 401 }),

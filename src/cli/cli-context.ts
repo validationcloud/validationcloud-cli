@@ -3,6 +3,7 @@ import type { CredentialStore } from "#auth/credential-store";
 import type { ErrorMappingContext } from "#core/map-error";
 import type { CatalogStore } from "#mcp/catalog-store";
 import type { ResolvedGateway } from "#core/resolve-gateway";
+import type { RequestTimeouts } from "#core/resolve-request-timeouts";
 
 export type CliContext = {
   gateway: ResolvedGateway;
@@ -11,6 +12,7 @@ export type CliContext = {
   catalogStore: CatalogStore;
   usesStaticToken: boolean;
   wantsJson: boolean;
+  requestTimeouts: RequestTimeouts;
   credentials: () => Promise<Credentials>;
   failureContext: ErrorMappingContext;
   stdout: (text: string) => void;
