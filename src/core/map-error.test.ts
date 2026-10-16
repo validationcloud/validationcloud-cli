@@ -7,8 +7,13 @@ import type { ErrorFacts, ErrorMappingContext } from "./map-error.ts";
 const stored: ErrorMappingContext = {
   usesStaticToken: false,
   gatewayUrl: "https://mcp.example.test/mcp",
+  proxy: undefined,
 };
 const staticToken: ErrorMappingContext = { ...stored, usesStaticToken: true };
+const behindProxy: ErrorMappingContext = {
+  ...stored,
+  proxy: { variable: "HTTPS_PROXY", origin: "http://proxy.example.test:3128" },
+};
 
 describe("mapErrorFacts", () => {
   it("maps HTTP 401 to exit-code-3 auth failure with the login hint", () => {
@@ -81,6 +86,54 @@ describe("mapErrorFacts", () => {
       kind: "runtime",
       message: "cannot reach https://mcp.example.test/mcp (ECONNREFUSED)",
       hint: "check your network, or set VC_MCP_URL to another gateway",
+    });
+  });
+
+  it("names the proxy as the likely cause of a network failure", () => {
+    expect(mapErrorFacts({ kind: "network", detail: "ECONNRESET" }, behindProxy)).toMatchObject({
+      kind: "runtime",
+      message: "cannot reach https://mcp.example.test/mcp (ECONNRESET)",
+      hint: "the proxy set in HTTPS_PROXY (http://proxy.example.test:3128) is the likely cause: check that it can reach the gateway, or unset it",
+    });
+  });
+
+  it("maps a timeout to a runtime failure that says how long it waited", () => {
+    expect(mapErrorFacts({ kind: "timeout", timeoutMs: 60_000 }, stored)).toMatchObject({
+      kind: "runtime",
+      message: "no response from https://mcp.example.test/mcp within 60 s",
+      hint: "check your network; if the call is slow rather than stuck, raise VC_REQUEST_TIMEOUT_MS",
+    });
+  });
+
+  it("states a sub-second-precise timeout in milliseconds", () => {
+    expect(mapErrorFacts({ kind: "timeout", timeoutMs: 1500 }, stored)).toMatchObject({
+      message: "no response from https://mcp.example.test/mcp within 1500 ms",
+    });
+  });
+
+  it("names the proxy as the likely cause of a timeout", () => {
+    expect(mapErrorFacts({ kind: "timeout", timeoutMs: 60_000 }, behindProxy)).toMatchObject({
+      kind: "runtime",
+      hint: "the proxy set in HTTPS_PROXY (http://proxy.example.test:3128) is the likely cause: check that it can reach the gateway, or unset it; if the call is slow rather than stuck, raise VC_REQUEST_TIMEOUT_MS",
+    });
+  });
+
+  it("names the variable alone when the proxy value is not a URL", () => {
+    const unparsable: ErrorMappingContext = {
+      ...stored,
+      proxy: { variable: "https_proxy", origin: undefined },
+    };
+    expect(mapErrorFacts({ kind: "timeout", timeoutMs: undefined }, unparsable)).toMatchObject({
+      message: "no response from https://mcp.example.test/mcp in time",
+      hint: "the proxy set in https_proxy is the likely cause: check that it can reach the gateway, or unset it; if the call is slow rather than stuck, raise VC_REQUEST_TIMEOUT_MS",
+    });
+  });
+
+  it("names the proxy as the likely cause of a failed token refresh", () => {
+    expect(
+      mapErrorFacts({ kind: "refresh-unavailable", detail: "the network failed" }, behindProxy),
+    ).toMatchObject({
+      hint: "the proxy set in HTTPS_PROXY (http://proxy.example.test:3128) is the likely cause: check that it can reach the gateway, or unset it",
     });
   });
 

@@ -25,10 +25,21 @@ export function buildCatalogRequest(
     principal: principalOfCredentials(input.credentials),
     catalogStore,
     policy: input.policy,
+    requestTimeoutMs: context.requestTimeouts.setupMs,
     connect: async () => {
       const credentials = await input.connectionCredentials();
-      const auth = buildMcpAuth(credentials, gateway, credentialStore);
-      const { client } = await connectMcpClient(gateway.url, auth, undefined);
+      const auth = buildMcpAuth(
+        credentials,
+        gateway,
+        credentialStore,
+        context.requestTimeouts.refreshMs,
+      );
+      const { client } = await connectMcpClient(
+        gateway.url,
+        auth,
+        undefined,
+        context.requestTimeouts.setupMs,
+      );
       return { client, principal: principalOfCredentials(credentials) };
     },
   };

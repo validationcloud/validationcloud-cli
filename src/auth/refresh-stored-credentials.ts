@@ -12,11 +12,9 @@ export type StoredCredentials = Extract<Credentials, { source: "stored" }>;
 export type RefreshOptions = {
   // The access token the gateway answered 401 for; undefined when the token merely looks expired.
   rejectedAccessToken: string | undefined;
-  // Bounds every request of the refresh, because the credentials lock is held meanwhile; undefined uses the default.
-  requestTimeoutMs: number | undefined;
+  // Bounds every request of the refresh, because the credentials lock is held meanwhile.
+  requestTimeoutMs: number;
 };
-
-const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
 
 function fetchWithTimeout(timeoutMs: number): FetchLike {
   return (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
@@ -53,7 +51,7 @@ export async function refreshStoredCredentials(
     });
     await auth(provider, {
       serverUrl: new URL(gateway.url),
-      fetchFn: fetchWithTimeout(requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS),
+      fetchFn: fetchWithTimeout(requestTimeoutMs),
     });
     const refreshed = await store.read(gatewayUrl);
     if (refreshed?.tokens === undefined) throw notLoggedIn(gateway);

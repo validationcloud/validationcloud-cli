@@ -28,6 +28,8 @@ Examples:
 Environment variables:
   VC_TOKEN    Bearer token to use instead of stored credentials; never refreshed
   VC_MCP_URL  Point valcloud at a different MCP gateway (development, self-hosted)
+  VC_REQUEST_TIMEOUT_MS
+              Milliseconds to wait for each gateway request (default 60000, 330000 for a tool call)
   CI          When set, destructive commands never prompt; pass --yes`;
 
 const USAGE_ERROR_HINT = "(add --help for additional information)";

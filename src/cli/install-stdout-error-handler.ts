@@ -1,9 +1,9 @@
 export const installStdoutErrorHandler = (): void => {
   process.stdout.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EPIPE") {
-      // Exiting immediately prevents repeated EPIPE writes in closed pipelines.
+      // Exiting immediately prevents repeated EPIPE writes in closed pipelines; a failure already decided keeps its code.
       // eslint-disable-next-line unicorn/no-process-exit
-      process.exit(0);
+      process.exit(process.exitCode ?? 0);
     }
     throw error;
   });

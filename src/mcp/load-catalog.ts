@@ -21,6 +21,7 @@ export type CatalogRequest = {
   principal: string;
   catalogStore: CatalogStore;
   policy: CatalogPolicy;
+  requestTimeoutMs: number;
   connect: () => Promise<CatalogConnection>;
 };
 
@@ -35,9 +36,9 @@ function toLoaded(cache: CatalogCache, stale: boolean): LoadedCatalog {
 
 export async function refreshCatalogFrom(
   client: Client,
-  request: Pick<CatalogRequest, "gatewayUrl" | "principal" | "catalogStore">,
+  request: Pick<CatalogRequest, "gatewayUrl" | "principal" | "catalogStore" | "requestTimeoutMs">,
 ): Promise<LoadedCatalog> {
-  const { tools } = await client.listTools();
+  const { tools } = await client.listTools(undefined, { timeout: request.requestTimeoutMs });
   const cache: CatalogCache = {
     fetchedAtMs: Date.now(),
     principal: request.principal,

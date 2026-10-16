@@ -13,6 +13,7 @@ export type LoginOptions = {
   gateway: ResolvedGateway;
   store: CredentialStore;
   launchBrowser: boolean;
+  requestTimeoutMs: number;
   tell: (text: string) => void;
 };
 
@@ -44,8 +45,8 @@ export async function runLogin(options: LoginOptions): Promise<void> {
     });
 
     try {
-      await client.connect(transport);
-      await client.listTools();
+      await client.connect(transport, { timeout: options.requestTimeoutMs });
+      await client.listTools(undefined, { timeout: options.requestTimeoutMs });
       throw new Error("the gateway did not ask for authorization");
     } catch (error) {
       if (!(error instanceof UnauthorizedError)) throw error;

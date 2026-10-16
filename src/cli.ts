@@ -1,10 +1,12 @@
+import { exitAfterFlush } from "#cli/exit-after-flush";
 import { installStdoutErrorHandler } from "#cli/install-stdout-error-handler";
 import { runCli } from "#cli/run-cli";
 
 installStdoutErrorHandler();
 
-process.exitCode = await runCli(process.argv.slice(2), {
+const exitCode = await runCli(process.argv.slice(2), {
   processEnv: process.env,
+  execArgv: process.execArgv,
   stdout: (text) => {
     process.stdout.write(text);
   },
@@ -12,3 +14,4 @@ process.exitCode = await runCli(process.argv.slice(2), {
     process.stderr.write(text);
   },
 });
+await exitAfterFlush(exitCode);

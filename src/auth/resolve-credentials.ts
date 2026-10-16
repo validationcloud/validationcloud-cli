@@ -24,8 +24,12 @@ export function buildMcpAuth(
   credentials: Credentials,
   gateway: ResolvedGateway,
   store: CredentialStore,
+  refreshTimeoutMs: number,
 ): McpAuth {
   if (credentials.source === "none") throw notLoggedIn(gateway);
   if (credentials.source === "VC_TOKEN") return { kind: "static", token: credentials.accessToken };
-  return { kind: "provider", provider: createStoredTokenProvider(gateway, store) };
+  return {
+    kind: "provider",
+    provider: createStoredTokenProvider(gateway, store, refreshTimeoutMs),
+  };
 }

@@ -1,8 +1,4 @@
 import type { Option } from "@commander-js/extra-typings";
-import { ProtocolError } from "@modelcontextprotocol/client";
-import type { Client } from "@modelcontextprotocol/client";
-import { buildMcpAuth } from "#auth/resolve-credentials";
-import type { Credentials } from "#auth/resolve-credentials";
 import type { PropertySpec, ToolSpec } from "#core/build-tool-spec";
 import { CliFailureError, createFailure, failureFromTool } from "#core/cli-failure";
 import { coerceFlagValue } from "#core/coerce-flag-value";
@@ -10,19 +6,14 @@ import { decideConfirmation, describeRefusal, isCiEnvironment } from "#core/deci
 import type { ConfirmationDecision } from "#core/decide-confirmation";
 import { formatJson } from "#core/format-output";
 import { interpretToolResult } from "#core/interpret-tool-result";
-import { isStaleCatalogRpcCode } from "#core/map-error";
 import { renderOutcome } from "#core/render-outcome";
 import { resolveToolArguments } from "#core/resolve-tool-arguments";
 import { SilentExitError } from "#core/silent-exit-error";
-import { connectMcpClient } from "#mcp/connect-mcp-client";
-import { refreshCatalogFrom } from "#mcp/load-catalog";
 import type { LoadedCatalog } from "#mcp/load-catalog";
-import { principalOfCredentials } from "./build-catalog-request.ts";
 import type { CliContext } from "./cli-context.ts";
+import { callGatewayTool } from "./call-gateway-tool.ts";
 import { confirmOnStderr } from "./confirm-on-stderr.ts";
-import { credentialsForConnect } from "./credentials-for-connect.ts";
 import { readStdin } from "./read-stdin.ts";
-import { toFailure } from "./to-failure.ts";
 
 const SIGINT_EXIT_CODE = 130;
 
@@ -107,28 +98,8 @@ async function promptForConfirmation(
   if (answer === "no") throw new CliFailureError(createFailure("runtime", "aborted"));
 }
 
-async function refreshStaleCatalog(
-  client: Client,
-  invocation: ToolInvocation,
-  credentials: Credentials,
-): Promise<void> {
-  const { context, options } = invocation;
-  try {
-    await refreshCatalogFrom(client, {
-      gatewayUrl: context.gateway.url,
-      principal: principalOfCredentials(credentials),
-      catalogStore: context.catalogStore,
-    });
-  } catch (error) {
-    // The call already succeeded, so a failed cache refresh is a note on stderr rather than a failure.
-    if (options.json === true) return;
-    const { message } = toFailure(error, context.failureContext);
-    context.stderr(`valcloud: note: could not refresh the cached tool list (${message})\n`);
-  }
-}
-
 export async function runToolCommand(invocation: ToolInvocation): Promise<void> {
-  const { spec, options, context, catalog } = invocation;
+  const { spec, options, context } = invocation;
   const decision = decideFor(invocation);
   // A refusal comes before reading stdin, so `--input -` never waits for input that cannot be confirmed.
   refuseUnconfirmable(invocation, decision);
@@ -146,24 +117,7 @@ export async function runToolCommand(invocation: ToolInvocation): Promise<void> 
   }
   await promptForConfirmation(invocation, decision);
 
-  const { gateway } = context;
-  const credentials = await credentialsForConnect(context);
-  const auth = buildMcpAuth(credentials, gateway, context.credentialStore);
-  const { client } = await connectMcpClient(gateway.url, auth, catalog.discover);
-  let result;
-  try {
-    try {
-      result = await client.callTool({ name: spec.toolName, arguments: resolved.value });
-    } catch (error) {
-      if (error instanceof ProtocolError && isStaleCatalogRpcCode(error.code)) {
-        await context.catalogStore.remove(gateway.url);
-      }
-      throw error;
-    }
-    if (catalog.stale) await refreshStaleCatalog(client, invocation, credentials);
-  } finally {
-    await client.close();
-  }
+  const result = await callGatewayTool(invocation, resolved.value);
 
   const outcome = interpretToolResult(result);
   if (outcome.kind === "failure") {

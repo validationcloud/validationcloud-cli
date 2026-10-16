@@ -14,6 +14,8 @@ pnpm valcloud nodeapi --help    # rebuild, then run from source
 
 `VC_MCP_URL` points `valcloud` at a different MCP gateway for one run. It must be https, or http on localhost.
 
+`VC_REQUEST_TIMEOUT_MS` replaces the request limits (60 s to load the tool list or sign in, 330 s for a tool call, 20 s per step of a token refresh) with one value; the integration tests shorten it to exercise a proxy that closes the connection or never answers.
+
 ## Releasing
 
 Merging into `main` publishes to npm through the `Release` workflow after CI passes. semantic-release picks the version from the squash commit, whose title and body are the pull request's:

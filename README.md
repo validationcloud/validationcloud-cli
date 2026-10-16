@@ -57,6 +57,10 @@ Results print as tab-separated text, ready for `cut`, `awk` or `sort`; lists get
 | 2         | Usage error, including a destructive command without `--yes`  |
 | 3         | Not logged in, or the login failed                            |
 
+`valcloud` waits 60 seconds for the service to answer when it loads the command list or signs you in, and 330 seconds for the result of a command. After that it exits with code 1. `VC_REQUEST_TIMEOUT_MS=<milliseconds>` replaces both limits (and the 20 seconds each step of a session renewal gets) with one value.
+
+Behind a proxy, set `NODE_USE_ENV_PROXY=1` and `HTTPS_PROXY` so Node uses it. When the service does not answer, the error names that proxy as the likely cause.
+
 Credentials are stored in `~/Library/Preferences/valcloud/` on macOS and `~/.config/valcloud/` on Linux, readable only by you.
 
 ## Contributing

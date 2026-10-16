@@ -15,6 +15,6 @@ export async function credentialsForConnect(context: CliContext): Promise<Creden
   if (!isExpired(expiry, Date.now())) return credentials;
   return refreshStoredCredentials(context.gateway, context.credentialStore, {
     rejectedAccessToken: undefined,
-    requestTimeoutMs: undefined,
+    requestTimeoutMs: context.requestTimeouts.refreshMs,
   });
 }
