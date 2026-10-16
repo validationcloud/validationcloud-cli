@@ -91,6 +91,15 @@ run_installer "$INSTALL_1" VALCLOUD_BIN_DIR="$H/otherbin"
 expect_equals "a rerun with another bin dir exits 0" "$RC" 0
 expect_contains "the note says the existing PATH line is for another directory" "$OUT" "has a valcloud PATH line for another directory, so $H/otherbin was not added"
 expect_equals "the other bin dir adds no second PATH line" "$(profile_lines "$H/.zshrc")" 1
+new_home
+run_installer "$INSTALL_1"
+run_installer "$INSTALL_2" VALCLOUD_BIN_DIR="$H/otherbin"
+expect_equals "an update into another bin dir exits 0" "$RC" 0
+expect_equals "the new launcher runs the update" "$(launcher_version "$H/otherbin/valcloud")" 0.2.0
+expect_equals "the launcher in the earlier bin dir still runs" "$(launcher_version "$H/.local/bin/valcloud")" 0.1.0
+rm "$H/.local/bin/valcloud"
+run_installer "$INSTALL_2" VALCLOUD_BIN_DIR="$H/otherbin"
+expect_equals "once the earlier launcher is gone, its bundle is removed" "$(ls "$H/.valcloud/lib")" valcloud-0.2.0.mjs
 
 echo "# launcher ownership"
 new_home
@@ -161,6 +170,13 @@ expect_equals "install paths with a space and a quote exit 0" "$RC" 0
 expect_equals "the launcher survives them" "$(launcher_version "$H/my bin/valcloud")" 0.1.0
 run_installer "$INSTALL_1" VALCLOUD_INSTALL_DIR=relative/dir
 expect_contains "a relative install dir is refused" "$OUT" "must be absolute paths"
+new_home
+run_installer "$INSTALL_1" VALCLOUD_BIN_DIR="$H/.valcloud/bin"
+expect_equals "a fresh install with the bin dir inside the install dir exits 0" "$RC" 0
+expect_equals "the launcher inside the install dir runs" "$(launcher_version "$H/.valcloud/bin/valcloud")" 0.1.0
+run_installer "$INSTALL_2" VALCLOUD_BIN_DIR="$H/.valcloud/bin"
+expect_equals "an update with the bin dir inside the install dir exits 0" "$RC" 0
+expect_equals "the launcher inside the install dir runs the update" "$(launcher_version "$H/.valcloud/bin/valcloud")" 0.2.0
 
 echo "# install dir safety"
 new_home
@@ -308,6 +324,18 @@ expect_contains "the failed cleanup is a warning" "$OUT" "Warning: could not rem
 expect_equals "the update landed" "$(launcher_version "$H/.local/bin/valcloud")" 0.2.0
 check "the PATH setup ran despite the failed cleanup" grep -qF 'added by the valcloud installer' "$H/.zshrc"
 rm -f "$WORK/shims-fail/rm"
+new_home
+cat >"$WORK/shims-fail/rm" <<EOF
+#!/bin/sh
+case "\$*" in *.install.*) echo "rm: simulated failure" >&2; exit 1 ;; esac
+PATH=$BASE_PATH exec rm "\$@"
+EOF
+chmod +x "$WORK/shims-fail/rm"
+RUN_PATH=$WORK/shims-fail:$BASE_PATH run_installer "$INSTALL_1"
+rm -f "$WORK/shims-fail/rm"
+expect_equals "a work dir that cannot be removed at exit still exits 0" "$RC" 0
+expect_contains "the leftover work dir is a warning" "$OUT" "Warning: could not remove the temporary directory $H/.valcloud/.install."
+expect_equals "the install with a leftover work dir landed" "$(launcher_version "$H/.local/bin/valcloud")" 0.1.0
 
 # F6: the reason a check failed is shown, and NODE_OPTIONS is named.
 new_home
@@ -440,6 +468,14 @@ kill "$PROXY_PID" 2>/dev/null
 wait "$PROXY_PID" 2>/dev/null
 
 echo "# Rosetta"
+mkdir -p "$WORK/shims-rosetta"
+# shellcheck disable=SC2016 # the shim's own variables must stay literal
+printf '#!/bin/sh\ncase "$1" in -s) echo Darwin ;; -m) echo x86_64 ;; esac\n' >"$WORK/shims-rosetta/uname"
+printf '#!/bin/sh\necho 1\n' >"$WORK/shims-rosetta/sysctl"
+chmod +x "$WORK/shims-rosetta/uname" "$WORK/shims-rosetta/sysctl"
+expect_equals "the harness prepares darwin-arm64 for an x86_64 shell under Rosetta" "$(PATH=$WORK/shims-rosetta:$BASE_PATH host_platform)" darwin-arm64
+printf '#!/bin/sh\necho 0\n' >"$WORK/shims-rosetta/sysctl"
+expect_equals "the harness prepares darwin-x64 on an Intel Mac" "$(PATH=$WORK/shims-rosetta:$BASE_PATH host_platform)" darwin-x64
 if [ "$PLATFORM" != darwin-arm64 ]; then
   skip "Rosetta: the host is not Apple silicon ($PLATFORM)"
 elif ! arch -x86_64 /usr/bin/true 2>/dev/null; then

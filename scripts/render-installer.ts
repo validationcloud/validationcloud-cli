@@ -19,7 +19,7 @@ export const NODE_DIST_URL = "https://nodejs.org/dist";
 const PACKAGE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 // Values land inside single quotes in the installer, so a quote or whitespace would break out of them.
 const URL_PATTERN = /^(?:https|file):\/\/[^\s']+$/u;
-const UNFILLED_PLACEHOLDER = /@[A-Z0-9_]+@/u;
+const PLACEHOLDER = /@(?<name>[A-Z0-9_]+)@/gu;
 const defaultTemplatePath = new URL("install.sh.in", import.meta.url);
 
 export function releaseAssetUrl(version: string, asset: string): string {
@@ -49,16 +49,17 @@ function placeholders(values: InstallerValues): [string, string][] {
   ];
 }
 
+// One pass with a callback inserts values literally: no `$&` patterns, and no value is scanned for placeholders.
 export function renderInstaller(template: string, values: InstallerValues): string {
-  let rendered = template;
-  for (const [name, value] of placeholders(values)) {
-    const token = `@${name}@`;
-    if (!rendered.includes(token)) throw new Error(`the installer template has no ${token}`);
-    rendered = rendered.replaceAll(token, value);
+  const filled = new Map(placeholders(values));
+  for (const name of filled.keys()) {
+    if (!template.includes(`@${name}@`)) throw new Error(`the installer template has no @${name}@`);
   }
-  const leftover = UNFILLED_PLACEHOLDER.exec(rendered);
-  if (leftover !== null) throw new Error(`the installer template still has ${leftover[0]}`);
-  return rendered;
+  return template.replaceAll(PLACEHOLDER, (token, name: string) => {
+    const value = filled.get(name);
+    if (value === undefined) throw new Error(`the installer template still has ${token}`);
+    return value;
+  });
 }
 
 export async function renderInstallerFile(options: {

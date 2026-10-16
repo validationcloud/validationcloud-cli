@@ -71,6 +71,8 @@ host_platform() { # the platform name the installer picks on this host (glibc Li
   local os arch
   case "$(uname -s)" in Darwin) os=darwin ;; *) os=linux ;; esac
   case "$(uname -m)" in x86_64 | amd64) arch=x64 ;; *) arch=arm64 ;; esac
+  # The installer picks the native build for a Rosetta shell on Apple silicon.
+  if [ "$os-$arch" = darwin-x64 ] && [ "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" = 1 ]; then arch=arm64; fi
   printf '%s-%s\n' "$os" "$arch"
 }
 

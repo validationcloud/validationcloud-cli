@@ -17,6 +17,7 @@ NODE_SHA256_LINUX_X64_MUSL='@NODE_SHA256_LINUX_X64_MUSL@'
 MARKER='# managed by the valcloud installer'
 PROFILE_MARKER='# added by the valcloud installer'
 INSTALL_MARKER_FILE='.valcloud-installer'
+LAUNCHERS_FILE='.valcloud-launchers'
 NPM_HINT='Alternative for Node.js >= 22.12 users: npm install -g @validationcloud/cli'
 WORK=''
 LAUNCHER_TMP=''
@@ -212,22 +213,34 @@ $(explain "$out")"
   mv -f "$WORK/valcloud.mjs" "$APP" || die "could not move valcloud into $APP. Check the free disk space and that you own $INSTALL_DIR, then run the installer again."
 }
 
-# An existing, non-empty directory is only used when an earlier run of this installer created it.
-claim_install_dir() {
+# An existing, non-empty directory is only used when an earlier run of this installer created it. Checked before the bin dir is created, which may lie inside it.
+check_install_dir() {
   if [ -e "$INSTALL_DIR" ] && [ ! -d "$INSTALL_DIR" ]; then
     die "$INSTALL_DIR exists and is not a directory."
   fi
   if [ -d "$INSTALL_DIR" ] && [ ! -f "$INSTALL_DIR/$INSTALL_MARKER_FILE" ] && [ -n "$(ls -A "$INSTALL_DIR")" ]; then
     die "$INSTALL_DIR is not empty and was not created by this installer, so it is left alone. Set VALCLOUD_INSTALL_DIR to an empty or new directory and run the installer again."
   fi
+}
+
+claim_install_dir() {
   mkdir -p "$INSTALL_DIR" || die "cannot create $INSTALL_DIR. Check its parent directory, or set VALCLOUD_INSTALL_DIR to a directory you own."
   printf '%s\n' 'This directory is managed by the valcloud installer.' >"$INSTALL_DIR/$INSTALL_MARKER_FILE" ||
     die "cannot write to $INSTALL_DIR. If an earlier run with sudo created it, take it back with: sudo chown -R \"\$(id -un)\" \"$INSTALL_DIR\""
 }
 
+# Runs on EXIT, where errexit would turn a failed delete into the script's exit status.
 cleanup() {
-  [ -z "$WORK" ] || rm -rf "$WORK"
-  [ -z "$LAUNCHER_TMP" ] || rm -f "$LAUNCHER_TMP"
+  set +e
+  if [ -n "$WORK" ]; then rm -rf "$WORK" || say "Warning: could not remove the temporary directory $WORK; it is safe to delete."; fi
+  if [ -n "$LAUNCHER_TMP" ]; then rm -f "$LAUNCHER_TMP" || say "Warning: could not remove the temporary file $LAUNCHER_TMP; it is safe to delete."; fi
+}
+
+# Cleanup keeps what every recorded launcher names, so one left in an earlier VALCLOUD_BIN_DIR keeps working.
+record_launcher() {
+  local file="$INSTALL_DIR/$LAUNCHERS_FILE"
+  if [ -f "$file" ] && grep -qxF "$LAUNCHER" "$file"; then return 0; fi
+  printf '%s\n' "$LAUNCHER" >>"$file" || die "cannot write $file. Check that you own $INSTALL_DIR, then run the installer again."
 }
 
 previous_version() {
@@ -270,21 +283,31 @@ $(explain "$out")"
   LAUNCHER_TMP=''
 }
 
-# Prints the node binary (1) or the bundle (2) that the launcher's exec line names.
-launcher_target() { # 1|2
-  [ -f "$LAUNCHER" ] || return 0
-  sed -n "s|^exec '\([^']*\)' --use-env-proxy --use-system-ca '\([^']*\)' \"\$@\"\$|\\$1|p" "$LAUNCHER"
+# Prints the runtime dir and the bundle that each recorded launcher still names, one per line.
+launcher_targets() {
+  local launcher node
+  [ -f "$INSTALL_DIR/$LAUNCHERS_FILE" ] || return 0
+  while IFS= read -r launcher; do
+    if [ -L "$launcher" ] || [ ! -f "$launcher" ] || ! grep -qF "$MARKER" "$launcher"; then continue; fi
+    node=$(sed -n "s|^exec '\([^']*\)' --use-env-proxy --use-system-ca '[^']*' \"\$@\"\$|\1|p" "$launcher")
+    printf '%s\n' "${node%/bin/node}"
+    sed -n "s|^exec '[^']*' --use-env-proxy --use-system-ca '\([^']*\)' \"\$@\"\$|\1|p" "$launcher"
+  done <"$INSTALL_DIR/$LAUNCHERS_FILE"
+  return 0
 }
 
-# Best effort: a failure here must not undo or hide an install that already works. Only the installer's own names are deleted, so a custom install dir that holds other files keeps them. The launcher is read again first, so the runtime and bundle of a run that finished meanwhile survive.
+# Best effort: a failure here must not undo or hide an install that already works. Only the installer's own names are deleted, so a custom install dir that holds other files keeps them. The launchers are read again first, so the runtime and bundle of a run that finished meanwhile survive.
 remove_old_versions() {
-  local entry keep_runtime keep_app
-  keep_runtime=$(launcher_target 1)
-  keep_runtime=${keep_runtime%/bin/node}
-  keep_app=$(launcher_target 2)
+  local entry keep
+  keep=$(launcher_targets)
   for entry in "$INSTALL_DIR"/runtime/node-v*-* "$INSTALL_DIR"/lib/valcloud-[0-9]*.mjs; do
     [ -e "$entry" ] || continue
-    if [ "$entry" = "${NODE%/bin/node}" ] || [ "$entry" = "$APP" ] || [ "$entry" = "$keep_runtime" ] || [ "$entry" = "$keep_app" ]; then continue; fi
+    if [ "$entry" = "${NODE%/bin/node}" ] || [ "$entry" = "$APP" ]; then continue; fi
+    case "
+$keep
+" in *"
+$entry
+"*) continue ;; esac
     rm -rf "$entry" || say "Warning: could not remove the old file $entry; it is safe to delete."
   done
   # Another run may still be using a fresh work dir or temp launcher, so only leftovers of killed runs go.
@@ -422,8 +445,10 @@ main() {
   detect_platform
   check_tools
   check_launcher_ownership
+  check_install_dir
   prepare_bin_dir
   claim_install_dir
+  record_launcher
   WORK=$(mktemp -d "$INSTALL_DIR/.install.XXXXXX") || die "cannot create a temporary directory in $INSTALL_DIR."
   trap cleanup EXIT
 

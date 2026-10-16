@@ -81,6 +81,24 @@ describe("renderInstaller", () => {
     );
   });
 
+  it("inserts a URL with $& replacement patterns literally", () => {
+    const rendered = renderInstaller(template, {
+      ...values,
+      bundleUrl: "https://example.com/valcloud.mjs?token=$&other=1$$",
+    });
+
+    expect(rendered).toContain(`VALCLOUD_URL='https://example.com/valcloud.mjs?token=$&other=1$$'`);
+  });
+
+  it("leaves a placeholder name inside a value as it is", () => {
+    const rendered = renderInstaller(template, {
+      ...values,
+      bundleUrl: "https://example.com/@NODE_VERSION@/valcloud.mjs",
+    });
+
+    expect(rendered).toContain(`VALCLOUD_URL='https://example.com/@NODE_VERSION@/valcloud.mjs'`);
+  });
+
   it("refuses a bundle hash that is not 64 hex digits", () => {
     expect(() => renderInstaller(template, { ...values, bundleSha256: "abc" })).toThrow(
       "invalid bundle SHA-256 for the installer: abc",
