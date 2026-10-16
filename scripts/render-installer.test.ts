@@ -9,10 +9,19 @@ import type { InstallerValues } from "./render-installer.ts";
 
 const values: InstallerValues = {
   version: "1.2.3",
-  bundleSha256: "a".repeat(64),
+  bundleSha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   bundleUrl: "https://example.com/releases/download/v1.2.3/valcloud.mjs",
   nodeBase: "https://nodejs.org/dist",
-  nodeRuntime,
+  nodeRuntime: {
+    version: "20.1.2",
+    sha256: {
+      "darwin-arm64": "1111111111111111111111111111111111111111111111111111111111111111",
+      "darwin-x64": "2222222222222222222222222222222222222222222222222222222222222222",
+      "linux-x64": "3333333333333333333333333333333333333333333333333333333333333333",
+      "linux-arm64": "4444444444444444444444444444444444444444444444444444444444444444",
+      "linux-x64-musl": "5555555555555555555555555555555555555555555555555555555555555555",
+    },
+  },
 };
 
 const template = await readFile(new URL("install.sh.in", import.meta.url), "utf8");
@@ -22,20 +31,46 @@ describe("renderInstaller", () => {
     const rendered = renderInstaller(template, values);
 
     expect(rendered).toContain(`VALCLOUD_VERSION='1.2.3'`);
-    expect(rendered).toContain(`VALCLOUD_SHA256='${"a".repeat(64)}'`);
+    expect(rendered).toContain(
+      `VALCLOUD_SHA256='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'`,
+    );
     expect(rendered).toContain(
       `VALCLOUD_URL='https://example.com/releases/download/v1.2.3/valcloud.mjs'`,
     );
     expect(rendered).not.toMatch(/@[A-Z0-9_]+@/u);
   });
 
-  it("pins the Node.js runtime from node-runtime.json", () => {
+  it("pins the Node.js version it is given", () => {
     const rendered = renderInstaller(template, values);
 
-    expect(rendered).toContain(`NODE_VERSION='24.22.0'`);
+    expect(rendered).toContain(`NODE_VERSION='20.1.2'`);
+  });
+
+  it("pins the Node.js hash it is given for each platform", () => {
+    const rendered = renderInstaller(template, values);
+
     expect(rendered).toContain(
-      `NODE_SHA256_LINUX_X64_MUSL='a95a0faf28d6f7c493036f0559d6d32b7b8c79aa06e415b12782f96946844484'`,
+      `NODE_SHA256_DARWIN_ARM64='1111111111111111111111111111111111111111111111111111111111111111'`,
     );
+    expect(rendered).toContain(
+      `NODE_SHA256_DARWIN_X64='2222222222222222222222222222222222222222222222222222222222222222'`,
+    );
+    expect(rendered).toContain(
+      `NODE_SHA256_LINUX_X64='3333333333333333333333333333333333333333333333333333333333333333'`,
+    );
+    expect(rendered).toContain(
+      `NODE_SHA256_LINUX_ARM64='4444444444444444444444444444444444444444444444444444444444444444'`,
+    );
+    expect(rendered).toContain(
+      `NODE_SHA256_LINUX_X64_MUSL='5555555555555555555555555555555555555555555555555555555555555555'`,
+    );
+  });
+
+  it("renders the real template with the real pin in node-runtime.json", () => {
+    const rendered = renderInstaller(template, { ...values, nodeRuntime });
+
+    expect(rendered).toMatch(/^NODE_VERSION='\d+\.\d+\.\d+'$/mu);
+    expect(rendered).not.toMatch(/@[A-Z0-9_]+@/u);
   });
 
   it("refuses a URL that could end the single quotes around it", () => {

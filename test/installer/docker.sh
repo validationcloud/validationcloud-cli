@@ -19,6 +19,7 @@ for platform in linux-x64 linux-arm64 linux-x64-musl; do
     exit 1
   }
 done
+PINNED_NODE=$(runtime_field 'runtime.version')
 make_stub_bundle 0.1.0 "$WORK/rel/0.1.0"
 make_stub_bundle 0.2.0 "$WORK/rel/0.2.0"
 render_installer 0.1.0 "$WORK/rel/0.1.0/valcloud.mjs" "$WORK/install-0.1.0.sh"
@@ -53,7 +54,7 @@ for platform in $matrix_platforms; do
   expect_equals "debian:12 $arch: install then update exits 0" "$RC" 0
   expect_contains "debian:12 $arch: the launcher works with no Node.js on PATH" "$OUT" "0.1.0"
   expect_contains "debian:12 $arch: the update lands" "$OUT" "Updated valcloud 0.1.0 -> 0.2.0"
-  if [ "$arch" = arm64 ]; then expected_runtime=node-v24.22.0-linux-arm64; else expected_runtime=node-v24.22.0-linux-x64; fi
+  if [ "$arch" = arm64 ]; then expected_runtime=node-v$PINNED_NODE-linux-arm64; else expected_runtime=node-v$PINNED_NODE-linux-x64; fi
   expect_contains "debian:12 $arch: the glibc runtime is chosen" "$OUT" "$expected_runtime"
 
   in_container "$platform" debian:12-slim "apt-get -qq update >/dev/null && apt-get -qq install -y curl musl >/dev/null 2>&1; ls /lib/ld-musl-* >/dev/null && $RUN \$I1 && $VERSION_OF && ls /root/.valcloud/runtime"
@@ -87,7 +88,7 @@ if supported linux/amd64; then
   in_container linux/amd64 alpine:3.22 "apk add -q bash curl >/dev/null; $RUN \$I1; apk add -q libstdc++ >/dev/null; $RUN \$I1 && $VERSION_OF && ls /root/.valcloud/runtime"
   expect_contains "alpine x86_64 without libstdc++ is refused with the fix" "$OUT" "apk add libstdc++"
   expect_contains "alpine x86_64 with libstdc++ runs" "$OUT" "0.1.0"
-  expect_contains "alpine x86_64 gets the musl runtime" "$OUT" "node-v24.22.0-linux-x64-musl"
+  expect_contains "alpine x86_64 gets the musl runtime" "$OUT" "node-v$PINNED_NODE-linux-x64-musl"
 else
   skip "alpine x86_64: linux/amd64 containers do not run on this host"
 fi
