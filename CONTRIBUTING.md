@@ -65,13 +65,3 @@ The release job runs on the pinned Node.js version, so the bundle smoke test in 
 The launcher starts Node.js as `node --use-env-proxy --use-system-ca <bundle>`: the first makes `fetch` honour `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, the second trusts the operating system's certificate store, which TLS-inspecting corporate proxies need. Without a proxy the first changes nothing, and the second only widens the trusted certificates to the system store. They are flags, not `NODE_USE_ENV_PROXY`, so they apply to the installer's own runtime and nothing else on the machine. `test/installer/run.sh` checks the flags and a plain CONNECT proxy with `NO_PROXY`. On every Node.js pin bump, also run `valcloud` through a real squid, a tinyproxy and a mitmproxy (once with its CA in the OS store, once with the CA only in `NODE_EXTRA_CA_CERTS`) and make sure requests go through and nothing hangs.
 
 Known risk, contained: on undici 7 (Node.js 24), a proxy that closes the connection to a `CONNECT` request without replying makes `fetch` reconnect forever ([nodejs/undici#3897](https://github.com/nodejs/undici/issues/3897), fixed in undici 8.6.0). `valcloud` still ends: the request timeout fails the call and the explicit exit closes the stuck socket (AGENTS.md, Timeouts and exit). The `bundle` CI job runs the proxy tests against the bundle on the pinned runtime.
-
-### Hosting `install.sh`
-
-`validationcloud.io/install.sh` is an HTTP 301 redirect, never a copy and never a branch. The Webflow redirect must cover both `https://validationcloud.io/install.sh` and `https://www.validationcloud.io/install.sh` (the apex host already redirects every path to `www`) and point to:
-
-```
-https://github.com/validationcloud/validationcloud-cli/releases/latest/download/install.sh
-```
-
-If Webflow cannot redirect to an external URL, use a Cloudflare redirect rule, and make sure no bot challenge applies to that path. Check both hosts from a home network and from a CI runner: `curl -fsSIL https://validationcloud.io/install.sh` must end in `200` on a `release-assets.githubusercontent.com` URL. Restrict who may edit the redirect: whoever can change it, or publish a release, can run code on customers' machines.
