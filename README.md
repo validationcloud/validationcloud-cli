@@ -9,13 +9,37 @@ $ valcloud nodeapi get-endpoint 00000000-0000-0000-0000-000000000000 --json
 
 ## Install
 
-Requires Node.js 22.12 or newer.
+On macOS 13.5 or newer and on Linux, this installs `valcloud` with its own copy of Node.js:
+
+```bash
+curl -fsSL https://validationcloud.io/install.sh | bash
+```
+
+Then open a new terminal. Run the same command again to update.
+
+The script puts everything under `~/.valcloud`, adds a launcher at `~/.local/bin/valcloud`, and adds `~/.local/bin` to your PATH in your shell's startup file if it is missing. `VALCLOUD_INSTALL_DIR` and `VALCLOUD_BIN_DIR` choose other locations; pass them again on every update. Run it as your own user: it refuses `sudo`.
+
+On Linux it needs x86_64 or arm64 with glibc 2.28 or newer, or x86_64 with musl and `libstdc++`. Scripts, cron jobs and `ssh host command` don't read your shell's startup files, so call `~/.local/bin/valcloud` by its full path there.
+
+### With npm
+
+On Windows, or anywhere with Node.js 22.12 or newer:
 
 ```bash
 npm install -g @validationcloud/cli
 ```
 
 To try it without installing, run `npx @validationcloud/cli --help`.
+
+### Uninstall
+
+Run `valcloud auth logout` to delete your stored login. Then, for the script install:
+
+```bash
+rm -rf ~/.valcloud ~/.local/bin/valcloud
+```
+
+and delete the line ending in `# added by the valcloud installer` from your shell startup file (for fish, delete `~/.config/fish/conf.d/valcloud.fish`). For an npm install, run `npm uninstall -g @validationcloud/cli`.
 
 ## Log in
 
@@ -57,9 +81,7 @@ Results print as tab-separated text, ready for `cut`, `awk` or `sort`; lists get
 | 2         | Usage error, including a destructive command without `--yes`  |
 | 3         | Not logged in, or the login failed                            |
 
-`valcloud` waits 60 seconds for the service to answer when it loads the command list or signs you in, and 330 seconds for the result of a command. After that it exits with code 1. `VC_REQUEST_TIMEOUT_MS=<milliseconds>` replaces both limits (and the 20 seconds each step of a session renewal gets) with one value.
-
-Behind a proxy, set `NODE_USE_ENV_PROXY=1` and `HTTPS_PROXY` so Node uses it. When the service does not answer, the error names that proxy as the likely cause.
+`valcloud --help` lists the environment variables, including the request timeout and proxy settings.
 
 Credentials are stored in `~/Library/Preferences/valcloud/` on macOS and `~/.config/valcloud/` on Linux, readable only by you.
 
