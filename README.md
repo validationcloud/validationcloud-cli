@@ -81,9 +81,7 @@ Results print as tab-separated text, ready for `cut`, `awk` or `sort`; lists get
 | 2         | Usage error, including a destructive command without `--yes`  |
 | 3         | Not logged in, or the login failed                            |
 
-`valcloud` waits 60 seconds for the service to answer when it loads the command list or signs you in, and 330 seconds for the result of a command. After that it exits with code 1. `VC_REQUEST_TIMEOUT_MS=<milliseconds>` replaces both limits (and the 20 seconds each step of a session renewal gets) with one value.
-
-Behind a proxy, set `HTTPS_PROXY`, and `NO_PROXY` for hosts that must bypass it. With an npm install, also set `NODE_USE_ENV_PROXY=1` so Node uses them. The script install already does, and it trusts your operating system's certificate store, so a TLS-inspecting proxy whose CA is installed there works. For a CA outside that store, point `NODE_EXTRA_CA_CERTS` at its PEM file. When the service does not answer, the error names that proxy as the likely cause.
+`valcloud --help` lists the environment variables, including the request timeout and proxy settings.
 
 Credentials are stored in `~/Library/Preferences/valcloud/` on macOS and `~/.config/valcloud/` on Linux, readable only by you.
 
