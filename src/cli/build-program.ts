@@ -23,7 +23,7 @@ Examples:
   valcloud <namespace> --help
   valcloud <namespace> <command> --help
   valcloud <namespace> <command> --json
-  valcloud tools | tail -n +2 | cut -f1 | sort | uniq -c
+  valcloud tools --json | jq -r '.tools[].namespace' | sort | uniq -c
 
 Environment variables:
   VC_TOKEN    Bearer token to use instead of stored credentials; never refreshed

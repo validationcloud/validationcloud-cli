@@ -72,7 +72,7 @@ Destructive commands ask for confirmation in a terminal. `--yes` skips the quest
 
 ## Output
 
-Results print as tab-separated text, ready for `cut`, `awk` or `sort`; lists get a header row. Add `--json` to get JSON instead. Errors and prompts go to stderr, so a pipe only receives results.
+Tool results print as tab-separated text, ready for `cut`, `awk` or `sort`; lists get a header row. `valcloud tools` prints one block per command instead, so use its `--json` output in scripts, for example `valcloud tools --json | jq -r '.tools[].namespace' | sort | uniq -c`. Add `--json` to any command to get JSON instead. Errors and prompts go to stderr, so a pipe only receives results.
 
 | Exit code | Meaning                                                       |
 | --------- | ------------------------------------------------------------- |

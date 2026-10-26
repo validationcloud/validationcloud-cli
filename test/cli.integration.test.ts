@@ -806,6 +806,18 @@ describe("valcloud --help", () => {
     expect(run.stdout).not.toContain("nodeapi");
   });
 
+  it("counts tools per namespace from the --json list, which `valcloud tools --json` provides", async () => {
+    const help = await runCli(["--help"]);
+    const list = await runCli(["tools", "--json"]);
+    const parsed = JSON.parse(list.stdout) as { tools: { namespace: string }[] };
+
+    expect(help.stdout).toContain(
+      "valcloud tools --json | jq -r '.tools[].namespace' | sort | uniq -c",
+    );
+    expect(help.stdout).not.toContain("tail -n +2");
+    expect(parsed.tools.map((tool) => tool.namespace)).toContain("demo");
+  });
+
   it("documents VC_MCP_URL and has no --env flag", async () => {
     const run = await runCli(["--help"]);
 
