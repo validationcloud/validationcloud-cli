@@ -64,7 +64,7 @@ valcloud nodeapi create-endpoint --help
 
 When a command needs a single value, you can pass it without its flag: `valcloud nodeapi get-endpoint <id>` is the same as `--id <id>`. `--input '<json>'` passes all options as one JSON object, and `--input -` reads that object from stdin. `--dry-run` prints the request instead of sending it.
 
-`valcloud tools` lists every command and marks which ones are read-only and which are destructive.
+`valcloud tools` lists every command with its full description and marks which ones are read-only and which are destructive. Add `--json` for the same list as JSON.
 
 ### Destructive commands
 

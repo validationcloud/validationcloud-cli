@@ -474,19 +474,28 @@ describe("valcloud tools", () => {
     "valcloud: note: demo.listItems has no command: the command 'valcloud demo list-items' is already taken by demo.list_items\n" +
     "valcloud: note: auth.status has no command: the namespace 'auth' is a built-in valcloud command\n";
 
-  it("lists the tool commands with their safety flags and the unmapped tools on stderr", async () => {
+  it("lists each tool with its safety flags and full description, and the unmapped tools on stderr", async () => {
     const run = await runCli(["tools"], { home: await freshHome() });
 
     expect(run).toStrictEqual({
       exitCode: 0,
       stdout:
-        "NAMESPACE\tCOMMAND\tTOOL\tDESCRIPTION\tREAD_ONLY\tDESTRUCTIVE\n" +
-        "demo\tlist-items\tdemo.list_items\tList the demo items.\ttrue\tfalse\n" +
-        "demo\tget-item\tdemo.get_item\tGet one demo item.\ttrue\tfalse\n" +
-        "demo\tdelete-item\tdemo.delete_item\tDelete one demo item.\tfalse\ttrue\n" +
-        "demo\tghost\tdemo.ghost\tA tool the server may remove.\ttrue\tfalse\n",
+        "valcloud demo list-items\ntool: demo.list_items\nread-only: true\ndestructive: false\n\n  List the demo items.\n\n" +
+        "valcloud demo get-item\ntool: demo.get_item\nread-only: true\ndestructive: false\n\n  Get one demo item. Items are free to read and need no approval.\n\n" +
+        "valcloud demo delete-item\ntool: demo.delete_item\nread-only: false\ndestructive: true\n\n  Delete one demo item.\n\n" +
+        "valcloud demo ghost\ntool: demo.ghost\nread-only: true\ndestructive: false\n\n  A tool the server may remove.\n",
       stderr: unmappedNotes,
     });
+  });
+
+  it("returns the full description of each tool in --json", async () => {
+    const run = await runCli(["tools", "--json"], { home: await freshHome() });
+
+    expect(run.exitCode).toBe(0);
+    const { tools } = JSON.parse(run.stdout) as { tools: { tool: string; description: string }[] };
+    expect(tools.find((entry) => entry.tool === "demo.get_item")?.description).toBe(
+      "Get one demo item. Items are free to read and need no approval.",
+    );
   });
 
   it("lists the unmapped tools with a reason in --json", async () => {
