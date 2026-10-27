@@ -1,7 +1,8 @@
 import type { Command } from "@commander-js/extra-typings";
 import type { ToolSpec } from "#core/build-tool-spec";
 import { buildToolSpecs } from "#core/build-tool-specs";
-import { formatHuman, formatJson } from "#core/format-output";
+import { formatJson } from "#core/format-output";
+import { formatToolList } from "#core/format-tool-list";
 import { loadCatalog } from "#mcp/load-catalog";
 import { buildCatalogRequest } from "./build-catalog-request.ts";
 import type { CliContext } from "./cli-context.ts";
@@ -14,7 +15,7 @@ function toRow(spec: ToolSpec): Record<string, unknown> {
     namespace: spec.namespace,
     command: spec.command,
     tool: spec.toolName,
-    description: spec.summary,
+    description: spec.description,
     read_only: spec.readOnly,
     destructive: spec.destructive,
   };
@@ -35,7 +36,6 @@ export function addToolsCommand(program: Command, context: CliContext): void {
         }),
       );
       const { specs, unmapped } = buildToolSpecs(catalog.tools, BUILT_IN_COMMANDS);
-      const rows = specs.map((spec) => toRow(spec));
       if (options.json === true) {
         const tools = specs.map((spec) =>
           Object.assign(toRow(spec), { input_only_properties: spec.inputOnlyProperties }),
@@ -51,7 +51,7 @@ export function addToolsCommand(program: Command, context: CliContext): void {
         );
         return;
       }
-      context.stdout(formatHuman(rows));
+      context.stdout(formatToolList(specs));
       for (const { toolName, reason } of unmapped) {
         context.stderr(`valcloud: note: ${toolName} has no command: ${reason}\n`);
       }

@@ -31,7 +31,7 @@ export function createStubMcpServer(mode: StubMode): McpServer {
   server.registerTool(
     "demo.get_item",
     {
-      description: "Get one demo item.",
+      description: "Get one demo item. Items are free to read and need no approval.",
       inputSchema: z.object({ id: z.string().describe("Item id") }),
       annotations: { readOnlyHint: true },
     },

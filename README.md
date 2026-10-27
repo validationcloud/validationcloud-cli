@@ -64,7 +64,7 @@ valcloud nodeapi create-endpoint --help
 
 When a command needs a single value, you can pass it without its flag: `valcloud nodeapi get-endpoint <id>` is the same as `--id <id>`. `--input '<json>'` passes all options as one JSON object, and `--input -` reads that object from stdin. `--dry-run` prints the request instead of sending it.
 
-`valcloud tools` lists every command and marks which ones are read-only and which are destructive.
+`valcloud tools` lists every command with its full description and marks which ones are read-only and which are destructive. Add `--json` for the same list as JSON.
 
 ### Destructive commands
 
@@ -72,7 +72,7 @@ Destructive commands ask for confirmation in a terminal. `--yes` skips the quest
 
 ## Output
 
-Results print as tab-separated text, ready for `cut`, `awk` or `sort`; lists get a header row. Add `--json` to get JSON instead. Errors and prompts go to stderr, so a pipe only receives results.
+Tool results print as tab-separated text, ready for `cut`, `awk` or `sort`; lists get a header row. `valcloud tools` prints one block per command instead, so use its `--json` output in scripts, for example `valcloud tools --json | jq -r '.tools[].namespace' | sort | uniq -c`. Add `--json` to any command to get JSON instead. Errors and prompts go to stderr, so a pipe only receives results.
 
 | Exit code | Meaning                                                       |
 | --------- | ------------------------------------------------------------- |
