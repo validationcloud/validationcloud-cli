@@ -25,7 +25,10 @@ export function createMcpConnection(url: string, auth: McpAuth): McpConnection {
     { name: "valcloud", version: packageInfo.version },
     { versionNegotiation: { mode: { pin: PINNED_PROTOCOL_VERSION } } },
   );
-  const transport = new StreamableHTTPClientTransport(new URL(url), { authProvider });
+  const transport = new StreamableHTTPClientTransport(new URL(url), {
+    authProvider,
+    requestInit: { headers: { "User-Agent": `vc-cli/${packageInfo.version}` } },
+  });
   return { client, transport };
 }
 
